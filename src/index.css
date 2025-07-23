@@ -1,0 +1,6 @@
+html,body{margin:0;padding:0;background:#111;color:#eee;font-family:sans-serif;}
+table{width:100%;border-collapse:collapse;}
+th,td{padding:8px;border:1px solid #333;text-align:center;}
+tr:nth-child(even){background:#1b1b1b;}
+a{color:#4da3ff;}
+button{cursor:pointer;}
