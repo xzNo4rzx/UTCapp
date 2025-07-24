@@ -1,27 +1,40 @@
 // src/utils/fetchHistoricalPrices.js
+import axios from "axios";
 
-import axios from 'axios';
+const API_KEY = import.meta.env.VITE_CRYPTOCOMPARE_API_KEY;
+const BASE_URL = "https://min-api.cryptocompare.com/data";
+const headers = { Authorization: `Apikey ${API_KEY}` };
 
 /**
- * Récupère les prix historiques pour un symbole donné.
- *
- * @param {string} symbole - Le symbole de l'actif (ex. 'AAPL', 'BTC', etc.).
- * @returns {Promise<Array<{ date: string, close: number }>>}
- * @throws En cas d’erreur réseau ou de données mal formées.
+ * Récupère l'historique (minutes, heures ou jours) pour une crypto.
+ * @param {string} symbol  ex. "BTC"
+ * @param {"minute"|"hour"|"day"} interval
+ * @param {number} limit   nombre de points à ramener
  */
-async function fetchHistoricalPrices(symbole) {
-  const url = `https://api.exemple.com/historical/${encodeURIComponent(symbole)}`;
-
+export default async function fetchHistoricalPrices(
+  symbol,
+  interval = "minute",
+  limit = 5
+) {
   try {
-    const response = await axios.get(url);
-    console.log(`Données reçues pour ${symbole} :`, response.data);
+    let url;
+    if (interval === "minute") {
+      url = `${BASE_URL}/histominute?fsym=${symbol}&tsym=USD&limit=${limit}`;
+    } else if (interval === "hour") {
+      url = `${BASE_URL}/histohour?fsym=${symbol}&tsym=USD&limit=${limit}`;
+    } else {
+      url = `${BASE_URL}/histoday?fsym=${symbol}&tsym=USD&limit=${limit}`;
+    }
 
-    const raw = Array.isArray(response.data.prices) ? response.data.prices : [];
-    return raw.map(p => ({ date: p.date, close: p.close }));
+    const resp = await axios.get(url, { headers });
+    const data = resp.data.Data;
+    if (!Array.isArray(data)) {
+      console.error("fetchHistoricalPrices resp.data:", resp.data);
+      throw new Error("Format inattendu de l'historique");
+    }
+    return data;
   } catch (err) {
-    console.error('Erreur récupération historiques :', err);
+    console.error("Erreur récupération historiques :", err);
     throw err;
   }
 }
-
-export default fetchHistoricalPrices;
