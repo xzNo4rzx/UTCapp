@@ -9,15 +9,17 @@ const BASE_URL = "https://min-api.cryptocompare.com/data";
 const getCurrentPrices = async (symbols) => {
   if (symbols.length === 0) return {};
   const url = `${BASE_URL}/pricemulti?fsyms=${symbols.join(",")}&tsyms=USD&api_key=${API_KEY}`;
-  const { data } = await axios.get(url);
-  return symbols.reduce((acc, sym) => {
-    acc[sym] = data[sym]?.USD ?? null;
-    return acc;
-  }, {});
+  try {
+    const { data } = await axios.get(url);
+    return data;
+  } catch (err) {
+    console.error("Erreur récupération des prix :", err);
+    return {};
+  }
 };
 
 export const PortfolioProvider = ({ children }) => {
-  const [portfolioName] = useState(() => {
+  const [portfolioName, setPortfolioName] = useState(() => {
     const now = new Date();
     const base = `PT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const stored = JSON.parse(localStorage.getItem("ptNames") || "[]");
@@ -27,64 +29,85 @@ export const PortfolioProvider = ({ children }) => {
     return name;
   });
 
-  const [cash, setCash] = useState(() => parseFloat(localStorage.getItem("pt_cash")) || 10000);
-  const [positions, setPositions] = useState(() => JSON.parse(localStorage.getItem("pt_positions") || "[]"));
-  const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem("pt_history") || "[]"));
+  const [cash, setCash] = useState(() => {
+    const stored = localStorage.getItem("pt-cash");
+    return stored ? parseFloat(stored) : 10000;
+  });
+
+  const [positions, setPositions] = useState(() => {
+    const stored = localStorage.getItem("pt-positions");
+    return stored ? JSON.parse(stored) : [];
+  });
+
+  const [history, setHistory] = useState(() => {
+    const stored = localStorage.getItem("pt-history");
+    return stored ? JSON.parse(stored) : [];
+  });
+
   const [currentPrices, setCurrentPrices] = useState({});
-  const [startTime] = useState(() => localStorage.getItem("pt_start") || new Date().toISOString());
 
   useEffect(() => {
-    localStorage.setItem("pt_cash", cash.toString());
-    localStorage.setItem("pt_positions", JSON.stringify(positions));
-    localStorage.setItem("pt_history", JSON.stringify(history));
-    localStorage.setItem("pt_start", startTime);
-  }, [cash, positions, history, startTime]);
+    localStorage.setItem("pt-cash", cash.toString());
+  }, [cash]);
+
+  useEffect(() => {
+    localStorage.setItem("pt-positions", JSON.stringify(positions));
+  }, [positions]);
+
+  useEffect(() => {
+    localStorage.setItem("pt-history", JSON.stringify(history));
+  }, [history]);
 
   const updatePrices = async () => {
-    const symbols = positions.map((p) => p.symbol);
-    const updated = await getCurrentPrices(symbols);
-    setCurrentPrices(updated);
+    const syms = positions.map((p) => p.symbol);
+    const freshPrices = await getCurrentPrices(syms);
+    const map = {};
+    for (const sym of syms) {
+      map[sym] = freshPrices[sym]?.USD ?? null;
+    }
+    setCurrentPrices(map);
   };
 
+  useEffect(() => {
+    updatePrices();
+  }, [positions]);
+
   const investedAmount = positions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0);
-  const currentValue = positions.reduce((sum, p) => {
-    const curr = currentPrices[p.symbol];
-    return curr ? sum + p.quantity * curr : sum;
-  }, 0);
+  const activePositionsCount = positions.length;
+  const totalTrades = history.length / 2; // 1 trade = buy+sell
+  const positiveTrades = history.filter((t) => t.type === "sell" && t.profit > 0).length;
 
-  const totalRealizedProfit = history
-    .filter((t) => t.type === "SELL")
-    .reduce((sum, t) => sum + (t.profit || 0), 0);
+  const totalProfit = history
+    .filter((t) => t.type === "sell")
+    .reduce((sum, t) => sum + t.profit, 0) +
+    positions.reduce((sum, p) => {
+      const curr = currentPrices[p.symbol] ?? 0;
+      return sum + p.quantity * (curr - p.buyPrice);
+    }, 0);
 
-  const totalProfit = currentValue + cash - 10000;
-  const totalProfitPercent = (totalProfit / 10000) * 100;
+  const totalProfitPercent = investedAmount
+    ? (totalProfit / (10000)) * 100
+    : 0;
 
   const buyPosition = (symbol, quantity, price) => {
     const id = Date.now();
     const investment = quantity * price;
-
-    const newPosition = {
-      id,
-      symbol,
-      quantity,
-      buyPrice: price,
-      date: new Date().toISOString(),
-    };
-
-    setPositions((prev) => [...prev, newPosition]);
-    setCash((prev) => prev - investment);
-
-    setHistory((prev) => [
+    setPositions((prev) => [
+      ...prev,
+      { id, symbol, quantity, buyPrice: price, date: new Date().toISOString() },
+    ]);
+    setCash((c) => c - investment);
+    setHistory((h) => [
       {
         id,
-        type: "BUY",
-        date: new Date().toISOString(),
+        type: "buy",
         symbol,
         quantity,
         buyPrice: price,
-        value: investment,
+        investment,
+        date: new Date().toISOString(),
       },
-      ...prev,
+      ...h,
     ]);
   };
 
@@ -96,38 +119,51 @@ export const PortfolioProvider = ({ children }) => {
     const cost = quantity * pos.buyPrice;
     const profit = proceeds - cost;
 
-    const updated = positions
-      .map((p) => (p.id === positionId ? { ...p, quantity: p.quantity - quantity } : p))
-      .filter((p) => p.quantity > 0);
+    setPositions((prev) =>
+      prev
+        .map((p) =>
+          p.id === positionId ? { ...p, quantity: p.quantity - quantity } : p
+        )
+        .filter((p) => p.quantity > 0)
+    );
 
-    setPositions(updated);
-    setCash((prev) => prev + proceeds);
-
-    setHistory((prev) => [
+    setCash((c) => c + proceeds);
+    setHistory((h) => [
       {
         id: Date.now(),
-        type: "SELL",
-        date: new Date().toISOString(),
+        type: "sell",
         symbol: pos.symbol,
         quantity,
         buyPrice: pos.buyPrice,
         sellPrice,
         profit,
-        originBuyId: pos.id,
+        date: new Date().toISOString(),
+        investment: cost,
       },
-      ...prev,
+      ...h,
     ]);
   };
 
   const resetPortfolio = () => {
     if (
-      confirm("Cette action est irréversible. Le portefeuille sera remis à 10 000 $ et toutes les positions actuelles seront perdues.")
+      window.confirm(
+        "Confirmer la réinitialisation du portefeuille à 10 000 $ ? Cela clôturera le PT actuel."
+      )
     ) {
-      localStorage.removeItem("pt_cash");
-      localStorage.removeItem("pt_positions");
-      localStorage.removeItem("pt_history");
-      localStorage.removeItem("pt_start");
-      window.location.reload();
+      const now = new Date();
+      const base = `PT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const stored = JSON.parse(localStorage.getItem("ptNames") || "[]");
+      const count = (stored.filter((n) => n.startsWith(base)).length + 1).toString().padStart(3, "0");
+      const name = `${base}-${count}`;
+      localStorage.setItem("ptNames", JSON.stringify([...stored, name]));
+      setPortfolioName(name);
+      setCash(10000);
+      setPositions([]);
+      setHistory([]);
+      setCurrentPrices({});
+      localStorage.removeItem("pt-cash");
+      localStorage.removeItem("pt-positions");
+      localStorage.removeItem("pt-history");
     }
   };
 
@@ -140,16 +176,15 @@ export const PortfolioProvider = ({ children }) => {
         history,
         currentPrices,
         investedAmount,
-        currentValue,
+        activePositionsCount,
+        totalTrades,
+        positiveTrades,
         totalProfit,
         totalProfitPercent,
-        totalTrades: history.filter((t) => t.type === "SELL").length,
-        positiveTrades: history.filter((t) => t.type === "SELL" && t.profit >= 0).length,
         updatePrices,
         buyPosition,
         sellPosition,
         resetPortfolio,
-        startTime,
       }}
     >
       {children}

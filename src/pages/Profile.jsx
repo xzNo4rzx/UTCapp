@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
 
@@ -10,20 +10,30 @@ const Profile = () => {
     history,
     currentPrices,
     investedAmount,
-    currentValue,
+    activePositionsCount,
+    totalTrades,
+    positiveTrades,
     totalProfit,
     totalProfitPercent,
     updatePrices,
+    resetPortfolio,
     sellPosition,
-    startTime,
   } = useContext(PortfolioContext);
 
   const [sellModal, setSellModal] = useState(false);
   const [sellSymbol, setSellSymbol] = useState("");
   const [sellPrice, setSellPrice] = useState(0);
   const [sellPercent, setSellPercent] = useState(100);
+  const [startDate, setStartDate] = useState(() => {
+    const stored = localStorage.getItem("ptStartDate");
+    return stored ? new Date(stored) : new Date();
+  });
 
-  const openSell = (symbol, price) => {
+  useEffect(() => {
+    localStorage.setItem("ptStartDate", startDate.toISOString());
+  }, [startDate]);
+
+  const handleSell = (symbol, price) => {
     setSellSymbol(symbol);
     setSellPrice(price);
     setSellPercent(100);
@@ -42,65 +52,54 @@ const Profile = () => {
   const handleSetMax = () => setSellPercent(100);
   const handleCloseSell = () => setSellModal(false);
 
-  const formattedStart = new Date(startTime).toLocaleString();
+  const fmt = (n) => Number(n).toFixed(2);
 
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", color: "#fff", fontFamily: "sans-serif", minHeight: "100vh" }}>
-      <h1>📊 Profil de trading</h1>
-      <h2 style={{ color: "#aaa", marginTop: "-1rem" }}>{portfolioName}</h2>
+      <h1>👤 Mon Portefeuille</h1>
+      <h2 style={{ color: "#aaa", marginTop: "-0.5rem" }}>{portfolioName}</h2>
 
-      {/* Bilan global */}
-      <section style={{ marginTop: "2rem", background: "#1e1e1e", padding: "1rem", borderRadius: "8px" }}>
-        <h3>📋 Bilan</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "2rem" }}>
-          <div>📅 Début du PT : {formattedStart}</div>
-          <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
-          <div>📦 Valeur actuelle des positions : ${currentValue.toFixed(2)}</div>
-          <div>📈 Investi : ${investedAmount.toFixed(2)}</div>
-          <div>📊 Positions en cours : {positions.length}</div>
-          <div>📉 Total trades : {history.filter(t => t.type === "SELL").length}</div>
-          <div>✅ Victoires : {history.filter(t => t.type === "SELL" && t.profit >= 0).length}</div>
-          <div style={{ marginLeft: "auto", backgroundColor: "#222", padding: "1rem", borderRadius: "8px", textAlign: "right" }}>
-            <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>📊 Rendement total :</div>
-            <div style={{ color: totalProfit >= 0 ? "lightgreen" : "salmon", fontSize: "1.1rem" }}>
-              ${totalProfit.toFixed(2)} ({totalProfitPercent.toFixed(2)}%)
-            </div>
+      {/* Bilan */}
+      <section style={{ backgroundColor: "#1e1e1e", padding: "1rem", borderRadius: "8px", marginTop: "1rem" }}>
+        <h3 style={{ marginTop: 0 }}>📊 Bilan</h3>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+          <div>🕒 Début : {startDate.toLocaleString()}</div>
+          <div>💰 Cash : ${fmt(cash)}</div>
+          <div>📈 Investi : ${fmt(investedAmount)}</div>
+          <div>📊 Positions : {activePositionsCount}</div>
+          <div>🔁 Trades : {totalTrades} (en cours : {activePositionsCount})</div>
+          <div>✅ Victoires : {positiveTrades} / {totalTrades}</div>
+          <div style={{ marginLeft: "auto", fontWeight: "bold", fontSize: "1.1rem", padding: "0.5rem 1rem", backgroundColor: "#222", borderRadius: "6px", color: totalProfit >= 0 ? "lightgreen" : "salmon" }}>
+            📈 Rendement total : ${fmt(totalProfit)} ({fmt(totalProfitPercent)}%)
           </div>
         </div>
       </section>
 
       {/* Boutons */}
-      <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "space-between" }}>
+      <div style={{ marginTop: "1rem", display: "flex", justifyContent: "space-between" }}>
         <button
-          onClick={() => {
-            updatePrices();
-            const btn = document.getElementById("updateBtn");
-            if (btn) {
-              btn.style.transform = "rotate(360deg)";
-              setTimeout(() => (btn.style.transform = "rotate(0deg)"), 500);
-            }
-          }}
-          id="updateBtn"
+          onClick={updatePrices}
           style={{
-            padding: "10px 20px",
+            padding: "8px 16px",
             backgroundColor: "#007bff",
             color: "#fff",
             border: "none",
             borderRadius: "4px",
             cursor: "pointer",
-            transition: "transform 0.5s",
+            animation: "pulse 0.4s",
           }}
         >
           🔄 UPDATE PRICES NOW
         </button>
-
         <button
           onClick={() => {
-            const ok = confirm("Réinitialiser le portefeuille à 10 000 $ ? Cette action est irréversible.");
-            if (ok) window.location.reload();
+            if (window.confirm("Confirmer la remise à zéro ? Cela clôturera le portefeuille actuel.")) {
+              localStorage.removeItem("ptStartDate");
+              resetPortfolio();
+            }
           }}
           style={{
-            padding: "10px 20px",
+            padding: "8px 16px",
             backgroundColor: "#dc3545",
             color: "#fff",
             border: "none",
@@ -108,45 +107,59 @@ const Profile = () => {
             cursor: "pointer",
           }}
         >
-          🔁 RESET PT TO 10000$
+          🧨 RESET PT TO 10000$
         </button>
       </div>
 
       {/* Positions en cours */}
       <section style={{ marginTop: "2rem" }}>
-        <h3>📍 Positions en cours</h3>
+        <h3>📌 Positions en cours</h3>
         {positions.length === 0 ? (
           <p>Aucune position ouverte.</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
               <thead>
                 <tr>
-                  {["Crypto", "Date d'achat", "Qté", "Investi ($)", "Prix d'achat", "Prix actuel", "P&L", "Action"].map((h) => (
-                    <th key={h} style={{ border: "1px solid #444", padding: "8px", textAlign: "center" }}>{h}</th>
-                  ))}
+                  <th>Crypto</th>
+                  <th>Date</th>
+                  <th>Qté</th>
+                  <th>Investi $</th>
+                  <th>Prix achat</th>
+                  <th>Prix actuel</th>
+                  <th>P&L</th>
+                  <th>Vendre</th>
                 </tr>
               </thead>
               <tbody>
                 {positions.map((p, i) => {
                   const curr = currentPrices[p.symbol] ?? 0;
-                  const invested = p.quantity * p.buyPrice;
-                  const pnl = (curr - p.buyPrice) * p.quantity;
+                  const investment = p.quantity * p.buyPrice;
+                  const valueNow = p.quantity * curr;
+                  const pnl = valueNow - investment;
+
                   return (
                     <tr key={p.id} style={{ backgroundColor: i % 2 === 0 ? "#1e1e1e" : "#252525" }}>
                       <td style={{ padding: "8px", textAlign: "center" }}>{p.symbol}</td>
                       <td style={{ padding: "8px", textAlign: "center" }}>{new Date(p.date).toLocaleString()}</td>
                       <td style={{ padding: "8px", textAlign: "center" }}>{p.quantity.toFixed(6)}</td>
-                      <td style={{ padding: "8px", textAlign: "center" }}>${invested.toFixed(2)}</td>
-                      <td style={{ padding: "8px", textAlign: "center" }}>${p.buyPrice.toFixed(2)}</td>
-                      <td style={{ padding: "8px", textAlign: "center" }}>${curr.toFixed(2)}</td>
+                      <td style={{ padding: "8px", textAlign: "center" }}>${fmt(investment)}</td>
+                      <td style={{ padding: "8px", textAlign: "center" }}>${fmt(p.buyPrice)}</td>
+                      <td style={{ padding: "8px", textAlign: "center" }}>${fmt(curr)}</td>
                       <td style={{ padding: "8px", textAlign: "center", color: pnl >= 0 ? "lightgreen" : "salmon" }}>
-                        ${pnl.toFixed(2)}
+                        ${fmt(pnl)}
                       </td>
                       <td style={{ padding: "8px", textAlign: "center" }}>
                         <button
-                          onClick={() => openSell(p.symbol, curr)}
-                          style={{ padding: "4px 8px", backgroundColor: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                          onClick={() => handleSell(p.symbol, curr)}
+                          style={{
+                            padding: "4px 8px",
+                            backgroundColor: "#dc3545",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                          }}
                         >
                           VENDRE
                         </button>
@@ -160,35 +173,46 @@ const Profile = () => {
         )}
       </section>
 
-      {/* Historique des transactions */}
+      {/* Historique */}
       <section style={{ marginTop: "2rem" }}>
-        <h3>📜 Historique</h3>
+        <h3>🕓 Historique</h3>
         {history.length === 0 ? (
-          <p>Aucune transaction enregistrée.</p>
+          <p>Aucun trade enregistré.</p>
         ) : (
-          history.map((t, i) => (
-            <div key={t.id} style={{ marginBottom: "1rem", padding: "1rem", backgroundColor: "#1e1e1e", borderRadius: "6px" }}>
-              <div>🕒 {new Date(t.date).toLocaleString()}</div>
-              <div>🔖 Transaction ID : {t.id}</div>
-              <div>🔹 Crypto : {t.symbol}</div>
-              {t.type === "BUY" ? (
-                <>
-                  <div>💸 Investissement : ${t.value.toFixed(2)}</div>
-                  <div>📥 Prix d’achat : ${t.buyPrice.toFixed(2)}</div>
-                  <div>📦 Quantité : {t.quantity.toFixed(6)}</div>
-                </>
-              ) : (
-                <>
-                  <div>📤 Prix de vente : ${t.sellPrice.toFixed(2)}</div>
-                  <div>💰 Profit : <span style={{ color: t.profit >= 0 ? "lightgreen" : "salmon" }}>${t.profit.toFixed(2)}</span></div>
-                </>
-              )}
-            </div>
-          ))
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Crypto</th>
+                  <th>Investi $</th>
+                  <th>Qté</th>
+                  <th>Prix</th>
+                  <th>Résultat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((t, i) => (
+                  <tr key={t.id} style={{ backgroundColor: i % 2 === 0 ? "#1e1e1e" : "#252525" }}>
+                    <td style={{ padding: "8px", textAlign: "center" }}>{new Date(t.date).toLocaleString()}</td>
+                    <td style={{ padding: "8px", textAlign: "center" }}>{t.type}</td>
+                    <td style={{ padding: "8px", textAlign: "center" }}>{t.symbol}</td>
+                    <td style={{ padding: "8px", textAlign: "center" }}>${fmt(t.investment)}</td>
+                    <td style={{ padding: "8px", textAlign: "center" }}>{t.quantity.toFixed(6)}</td>
+                    <td style={{ padding: "8px", textAlign: "center" }}>${fmt(t.type === "buy" ? t.buyPrice : t.sellPrice)}</td>
+                    <td style={{ padding: "8px", textAlign: "center", color: t.type === "sell" ? (t.profit >= 0 ? "lightgreen" : "salmon") : "#ccc" }}>
+                      {t.type === "sell" ? `$${fmt(t.profit)}` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
-      {/* Sell Modal */}
+      {/* Modal vente */}
       <SellModal
         show={sellModal}
         symbol={sellSymbol}

@@ -7,7 +7,7 @@ const CryptoList = ({ cryptos, positions, onBuy, onOpenSell }) => {
     <div>
       <h3 style={{ color: "#fff" }}>🧾 Autres cryptos</h3>
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "1100px" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "1000px" }}>
           <thead>
             <tr>
               <th>Symbole</th>
@@ -15,7 +15,7 @@ const CryptoList = ({ cryptos, positions, onBuy, onOpenSell }) => {
               <th>Variation (5min)</th>
               <th>Achat</th>
               <th>Vente</th>
-              <th>TradingViewLink</th>
+              <th>TradingView</th>
             </tr>
           </thead>
           <tbody>
@@ -40,14 +40,14 @@ const CryptoList = ({ cryptos, positions, onBuy, onOpenSell }) => {
                       VENTE
                     </button>
                   </td>
-                  <td style={{ textAlign: "center" }}>
+                  <td>
                     <a
                       href={`https://www.tradingview.com/symbols/${c.symbol}USD`}
                       target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#0af", textDecoration: "none", fontSize: "1.2rem" }}
+                      rel="noreferrer"
+                      style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none" }}
                     >
-                      ➡️
+                      →
                     </a>
                   </td>
                 </tr>

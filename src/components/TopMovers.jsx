@@ -4,7 +4,7 @@ const TopMovers = ({ title, data, positions, onBuy, onOpenSell }) => (
   <div style={{ marginBottom: "2rem" }}>
     <h3 style={{ color: "#fff" }}>{title}</h3>
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "1000px" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "950px" }}>
         <thead>
           <tr>
             <th>Crypto</th>
@@ -12,7 +12,7 @@ const TopMovers = ({ title, data, positions, onBuy, onOpenSell }) => (
             <th>Variation (5min)</th>
             <th>Achat</th>
             <th>Vente</th>
-            <th>TradingViewLink</th>
+            <th>TradingView</th>
           </tr>
         </thead>
         <tbody>
@@ -37,14 +37,14 @@ const TopMovers = ({ title, data, positions, onBuy, onOpenSell }) => (
                     VENTE
                   </button>
                 </td>
-                <td style={{ textAlign: "center" }}>
+                <td>
                   <a
                     href={`https://www.tradingview.com/symbols/${c.symbol}USD`}
                     target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: "#0af", textDecoration: "none", fontSize: "1.2rem" }}
+                    rel="noreferrer"
+                    style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none" }}
                   >
-                    ➡️
+                    →
                   </a>
                 </td>
               </tr>
