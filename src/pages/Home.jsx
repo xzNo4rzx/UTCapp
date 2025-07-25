@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PortfolioContext } from "../context/PortfolioContext";
 import { IATraderContext } from "../context/IATraderContext";
@@ -6,7 +6,6 @@ import { IATraderContext } from "../context/IATraderContext";
 const Home = () => {
   const {
     portfolioName,
-    startDate,
     cash,
     positions,
     history,
@@ -25,6 +24,15 @@ const Home = () => {
     iaTotalProfit,
     iaTotalProfitPercent,
   } = useContext(IATraderContext);
+
+  const [ptStartDate, setPtStartDate] = useState("");
+
+  useEffect(() => {
+    const storedStart = localStorage.getItem("ptStartDate");
+    if (storedStart) {
+      setPtStartDate(storedStart);
+    }
+  }, []);
 
   const fmt = (v, d = 2) => (v ? Number(v).toFixed(d) : "0.00");
 
@@ -77,7 +85,7 @@ const Home = () => {
             <h2>{title}</h2>
             <p style={{ color: "#aaa", fontSize: "0.9rem" }}>
               Nom : <strong>{name}</strong><br />
-              Démarré le : {formatDate(start)}<br />
+              Démarré le : {start ? formatDate(start) : "—"}<br />
               Cash disponible : ${fmt(cash)}<br />
               Positions en cours : {openPositions}<br />
               Valeur actuelle des positions : ${fmt(valueNow)}<br />
@@ -128,7 +136,7 @@ const Home = () => {
       {renderBox({
         title: "💼 Portefeuille virtuel",
         name: portfolioName,
-        start: startDate,
+        start: ptStartDate,
         cash,
         positions,
         history,

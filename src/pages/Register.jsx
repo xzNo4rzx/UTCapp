@@ -1,3 +1,4 @@
+// src/pages/Register.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
@@ -20,7 +21,9 @@ const Register = () => {
 
       await setDoc(doc(db, "users", newUser.uid), {
         email,
-        status: "pending", // statut utilisé pour admin approval
+        displayName: "",
+        approved: false,
+        createdAt: new Date().toISOString(),
       });
 
       navigate("/login");
