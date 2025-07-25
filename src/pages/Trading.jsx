@@ -13,7 +13,6 @@ const Trading = () => {
     currentPrices,
     buyPosition,
     sellPosition,
-    resetPortfolio,
     updatePrices,
     investedAmount,
     totalProfit,
@@ -111,30 +110,53 @@ const Trading = () => {
   const handleSetMax = () => setSellPercent(100);
   const handleCloseSell = () => setSellModal(false);
 
+  const startDate = localStorage.getItem("ptStartDate");
+
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", minHeight: "100vh", color: "#fff", fontFamily: "sans-serif" }}>
-      <h1>🪙 Trading</h1>
-      <h2 style={{ marginTop: "-1rem", color: "#aaa" }}>{portfolioName}</h2>
+      <h1>💸 TradingVirtuel</h1>
+      <h2 style={{ marginTop: "-1rem", color: "#aaa" }}>
+        {portfolioName} | 🕒 Début : {startDate ? new Date(startDate).toLocaleString() : "—"}
+      </h2>
 
-      <div style={{ margin: "1rem 0" }}>
-        <strong>Cash :</strong> ${cash?.toFixed(2) ?? "0.00"} | 
-        <strong> Investi :</strong> ${investedAmount?.toFixed(2) ?? "0.00"} | 
-        <strong> P&L global :</strong> <span style={{ color: totalProfit >= 0 ? "lightgreen" : "salmon" }}>
-          ${totalProfit?.toFixed(2) ?? "0.00"} ({totalProfitPercent?.toFixed(2) ?? "0.00"}%)
-        </span>
+      <div style={{ marginTop: "1rem" }}>
+        <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
+        <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
+        <div>📈 Investi : ${investedAmount.toFixed(2)}</div>
+        <div style={{ color: totalProfit >= 0 ? "lightgreen" : "salmon" }}>
+          📊 Rendement total : ${totalProfit.toFixed(2)} ({totalProfitPercent.toFixed(2)}%)
+        </div>
+        <div style={{ marginTop: "1rem" }}>
+          📌 Positions placées : {positionSummary.count} | Valeur actuelle : ${positionSummary.value.toFixed(2)}
+        </div>
       </div>
 
-      <div style={{ textAlign: "right", marginBottom: "1rem", fontSize: "0.9rem", color: "#888" }}>
-        Positions : {positionSummary.count} | Valeur actuelle : ${positionSummary.value.toFixed(2)}
-      </div>
-
-      <div style={{ marginBottom: "1.5rem" }}>
-        <button onClick={handleUpdatePrices} style={{ marginRight: "1rem", padding: "8px 16px", backgroundColor: "#007bff", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}>
-          🔄 UPDATE
+      <div style={{ margin: "2rem 0" }}>
+        <button
+          onClick={handleUpdatePrices}
+          style={{
+            marginRight: "1rem",
+            padding: "12px 24px",
+            backgroundColor: "#007bff",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "1rem",
+            animation: "shake 0.4s",
+          }}
+        >
+          🔄 UPDATE PRICES NOW
         </button>
-        <button onClick={resetPortfolio} style={{ padding: "8px 16px", backgroundColor: "#ff4d4f", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}>
-          🔄 RESET
-        </button>
+        <style>{`
+          @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-2px); }
+            50% { transform: translateX(2px); }
+            75% { transform: translateX(-2px); }
+            100% { transform: translateX(0); }
+          }
+        `}</style>
       </div>
 
       {lastUpdate && (
@@ -143,9 +165,9 @@ const Trading = () => {
         </div>
       )}
 
-      <TopMovers title="📈 Top 5 hausses" data={top5Up} positions={positions} onBuy={handleBuy} onOpenSell={openSell} />
-      <TopMovers title="📉 Top 5 baisses" data={top5Down} positions={positions} onBuy={handleBuy} onOpenSell={openSell} />
-      <CryptoList cryptos={sortedCryptos} positions={positions} onBuy={handleBuy} onOpenSell={openSell} />
+      <TopMovers title="📈 Top 5 hausses" data={top5Up} positions={positions} onBuy={handleBuy} onOpenSell={openSell} headerAlign="left" />
+      <TopMovers title="📉 Top 5 baisses" data={top5Down} positions={positions} onBuy={handleBuy} onOpenSell={openSell} headerAlign="left" />
+      <CryptoList cryptos={sortedCryptos} positions={positions} onBuy={handleBuy} onOpenSell={openSell} headerAlign="left" />
 
       <SellModal
         show={sellModal}

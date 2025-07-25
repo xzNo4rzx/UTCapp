@@ -74,29 +74,37 @@ export const PortfolioProvider = ({ children }) => {
 
   const investedAmount = positions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0);
   const activePositionsCount = positions.length;
-  const totalTrades = history.length / 2; // 1 trade = buy+sell
+  const totalTrades = history.filter((t) => t.type === "buy").length;
   const positiveTrades = history.filter((t) => t.type === "sell" && t.profit > 0).length;
 
-  const totalProfit = history
-    .filter((t) => t.type === "sell")
-    .reduce((sum, t) => sum + t.profit, 0) +
+  const totalProfit =
+    history.filter((t) => t.type === "sell").reduce((sum, t) => sum + t.profit, 0) +
     positions.reduce((sum, p) => {
       const curr = currentPrices[p.symbol] ?? 0;
       return sum + p.quantity * (curr - p.buyPrice);
     }, 0);
 
-  const totalProfitPercent = investedAmount
-    ? (totalProfit / (10000)) * 100
-    : 0;
+  const totalProfitPercent = investedAmount ? (totalProfit / 10000) * 100 : 0;
 
   const buyPosition = (symbol, quantity, price) => {
-    const id = Date.now();
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 16).replace(/[-T:]/g, "").slice(2);
+    const stored = JSON.parse(localStorage.getItem("pt-nid") || "[]");
+    const currentLetter = stored.length < 9 ? "A" : "B";
+    const currentIndex = stored.length % 9 + 1;
+    const paddedIndex = (stored.length + 1).toString().padStart(3, "0");
+    const id = `${dateStr}-${paddedIndex}${currentLetter}${currentIndex}`;
+    localStorage.setItem("pt-nid", JSON.stringify([...stored, id]));
+
     const investment = quantity * price;
+
     setPositions((prev) => [
       ...prev,
       { id, symbol, quantity, buyPrice: price, date: new Date().toISOString() },
     ]);
+
     setCash((c) => c - investment);
+
     setHistory((h) => [
       {
         id,
@@ -128,6 +136,7 @@ export const PortfolioProvider = ({ children }) => {
     );
 
     setCash((c) => c + proceeds);
+
     setHistory((h) => [
       {
         id: Date.now(),
@@ -156,6 +165,7 @@ export const PortfolioProvider = ({ children }) => {
       const count = (stored.filter((n) => n.startsWith(base)).length + 1).toString().padStart(3, "0");
       const name = `${base}-${count}`;
       localStorage.setItem("ptNames", JSON.stringify([...stored, name]));
+      localStorage.removeItem("pt-nid");
       setPortfolioName(name);
       setCash(10000);
       setPositions([]);

@@ -1,18 +1,24 @@
 import React from "react";
 
+const formatPrice = (value) => {
+  if (value >= 1) return value.toFixed(2);
+  if (value >= 0.01) return value.toFixed(4);
+  return value.toFixed(6);
+};
+
 const TopMovers = ({ title, data, positions, onBuy, onOpenSell }) => (
   <div style={{ marginBottom: "2rem" }}>
     <h3 style={{ color: "#fff" }}>{title}</h3>
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "950px" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
         <thead>
           <tr>
-            <th>Crypto</th>
-            <th>Prix</th>
-            <th>Variation (5min)</th>
-            <th>Achat</th>
-            <th>Vente</th>
-            <th>TradingView</th>
+            <th style={{ textAlign: "left", padding: "6px" }}>Crypto</th>
+            <th style={{ textAlign: "left", padding: "6px" }}>Prix</th>
+            <th style={{ textAlign: "left", padding: "6px" }}>Variation (5min)</th>
+            <th style={{ textAlign: "left", padding: "6px" }}>Achat</th>
+            <th style={{ textAlign: "left", padding: "6px" }}>Vente</th>
+            <th style={{ textAlign: "left", padding: "6px" }}>TradingView</th>
           </tr>
         </thead>
         <tbody>
@@ -20,9 +26,9 @@ const TopMovers = ({ title, data, positions, onBuy, onOpenSell }) => (
             const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
             return (
               <tr key={c.symbol} style={{ backgroundColor: i % 2 === 0 ? "#1e1e1e" : "#252525" }}>
-                <td style={{ padding: "8px", color: "#fff" }}>{c.symbol}</td>
-                <td style={{ padding: "8px", color: "#ccc" }}>${c.currentPrice?.toFixed(4)}</td>
-                <td style={{ padding: "8px", color: c.changePercent >= 0 ? "lightgreen" : "salmon" }}>
+                <td style={{ padding: "6px", color: "#fff" }}>{c.symbol}</td>
+                <td style={{ padding: "6px", color: "#ccc" }}>${formatPrice(c.currentPrice)}</td>
+                <td style={{ padding: "6px", color: c.changePercent >= 0 ? "lightgreen" : "salmon" }}>
                   {c.changePercent.toFixed(2)}%
                 </td>
                 <td>
