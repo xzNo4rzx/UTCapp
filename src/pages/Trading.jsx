@@ -1,9 +1,9 @@
+// src/pages/Trading.jsx
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import fetchPrices from "../utils/fetchPrices";
 import { PortfolioContext } from "../context/PortfolioContext";
-import TopMovers from "../components/TopMovers";
-import CryptoList from "../components/CryptoList";
 import SellModal from "../components/SellModal";
+
 
 const Trading = () => {
   const {
@@ -20,14 +20,14 @@ const Trading = () => {
   } = useContext(PortfolioContext);
 
   const [cryptos, setCryptos] = useState([]);
-  const [top5Up, setTop5Up] = useState([]);
-  const [top5Down, setTop5Down] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(null);
-
   const [sellModal, setSellModal] = useState(false);
   const [sellSymbol, setSellSymbol] = useState("");
   const [sellPrice, setSellPrice] = useState(0);
   const [sellPercent, setSellPercent] = useState(100);
+  const [top5Up, setTop5Up] = useState([]);
+  const [top5Down, setTop5Down] = useState([]);
+  const [updatedPrices, setUpdatedPrices] = useState({}); // animations
 
   const openSell = (symbol, price) => {
     setSellSymbol(symbol);
@@ -55,21 +55,38 @@ const Trading = () => {
       alert("Fonds insuffisants !");
       return;
     }
-    const quantity = amount / price;
-    buyPosition(symbol, quantity, price);
+    if (window.confirm(`Confirmer achat de ${symbol} pour $${amount.toFixed(2)} (valeur actuelle : $${price.toFixed(2)}) ?`)) {
+      const quantity = amount / price;
+      buyPosition(symbol, quantity, price);
+    }
   };
 
   const handleUpdatePrices = async () => {
+    const updateBtn = document.getElementById("update-btn");
+    if (updateBtn) {
+      updateBtn.classList.add("shake");
+      setTimeout(() => updateBtn.classList.remove("shake"), 500);
+    }
+
     try {
       const { top5Up, top5Down, rest } = await fetchPrices();
       const now = new Date().toLocaleTimeString();
-      setTop5Up(top5Up);
-      setTop5Down(top5Down);
-
       const merged = [...top5Up, ...top5Down, ...rest];
       const unique = Array.from(new Map(merged.map(c => [c.symbol, c])).values());
-      setCryptos(unique);
 
+      // détecter changements
+      const changed = {};
+      unique.forEach((c) => {
+        const prev = cryptos.find((p) => p.symbol === c.symbol);
+        if (prev && prev.currentPrice !== c.currentPrice) {
+          changed[c.symbol] = true;
+        }
+      });
+      setUpdatedPrices(changed);
+
+      setCryptos(unique);
+      setTop5Up(top5Up);
+      setTop5Down(top5Down);
       setLastUpdate(now);
       updatePrices();
     } catch (err) {
@@ -112,6 +129,60 @@ const Trading = () => {
 
   const startDate = localStorage.getItem("ptStartDate");
 
+  const renderCryptoBlock = (c) => {
+    const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
+    const priceColor = c.changePercent >= 0 ? "lightgreen" : "salmon";
+    const animate = updatedPrices[c.symbol];
+
+    return (
+      <div key={c.symbol} style={{
+        borderLeft: `6px solid ${c.changePercent >= 0 ? "#0f0" : "#f00"}`,
+        backgroundColor: "#1e1e1e",
+        borderRadius: "8px",
+        padding: "1rem",
+        width: "100%",
+        boxSizing: "border-box"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{c.symbol}</div>
+          <div className={animate ? "animate-price" : ""} style={{ color: "#ccc", fontSize: "1rem" }}>
+            ${c.currentPrice?.toFixed(4)}
+          </div>
+          <div style={{ color: priceColor, fontSize: "1rem" }}>{c.changePercent.toFixed(2)}%</div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem", flexWrap: "wrap", gap: "1rem" }}>
+          <button
+            onClick={() => handleBuy(c.symbol, c.currentPrice)}
+            style={{ padding: "6px 12px", backgroundColor: "#4ea8de", color: "#fff", border: "none", borderRadius: "4px" }}
+          >
+            ACHAT
+          </button>
+          <button
+            onClick={() => openSell(c.symbol, c.currentPrice)}
+            disabled={!hasPosition}
+            style={{
+              backgroundColor: hasPosition ? "#dc3545" : "#555",
+              color: "#fff",
+              padding: "6px 12px",
+              border: "none",
+              borderRadius: "4px",
+            }}
+          >
+            VENTE
+          </button>
+          <a
+            href={`https://www.tradingview.com/symbols/${c.symbol}USD`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none", alignSelf: "center" }}
+          >
+            → TradingView
+          </a>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", minHeight: "100vh", color: "#fff", fontFamily: "sans-serif" }}>
       <h1>💸 TradingVirtuel</h1>
@@ -119,6 +190,7 @@ const Trading = () => {
         {portfolioName} | 🕒 Début : {startDate ? new Date(startDate).toLocaleString() : "—"}
       </h2>
 
+      {/* Bilan */}
       <div style={{ marginTop: "1rem" }}>
         <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
         <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
@@ -131,8 +203,10 @@ const Trading = () => {
         </div>
       </div>
 
+      {/* Update Button */}
       <div style={{ margin: "2rem 0" }}>
         <button
+          id="update-btn"
           onClick={handleUpdatePrices}
           style={{
             marginRight: "1rem",
@@ -142,21 +216,11 @@ const Trading = () => {
             border: "none",
             borderRadius: "4px",
             cursor: "pointer",
-            fontSize: "1rem",
-            animation: "shake 0.4s",
+            fontSize: "1rem"
           }}
         >
           🔄 UPDATE PRICES NOW
         </button>
-        <style>{`
-          @keyframes shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-2px); }
-            50% { transform: translateX(2px); }
-            75% { transform: translateX(-2px); }
-            100% { transform: translateX(0); }
-          }
-        `}</style>
       </div>
 
       {lastUpdate && (
@@ -165,9 +229,24 @@ const Trading = () => {
         </div>
       )}
 
-      <TopMovers title="📈 Top 5 hausses" data={top5Up} positions={positions} onBuy={handleBuy} onOpenSell={openSell} headerAlign="left" />
-      <TopMovers title="📉 Top 5 baisses" data={top5Down} positions={positions} onBuy={handleBuy} onOpenSell={openSell} headerAlign="left" />
-      <CryptoList cryptos={sortedCryptos} positions={positions} onBuy={handleBuy} onOpenSell={openSell} headerAlign="left" />
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h3>📈 Top 5 hausses</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {top5Up.map(renderCryptoBlock)}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h3>📉 Top 5 baisses</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {top5Down.map(renderCryptoBlock)}
+        </div>
+      </div>
+
+      <h3>🧾 Autres cryptos</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        {sortedCryptos.map(renderCryptoBlock)}
+      </div>
 
       <SellModal
         show={sellModal}
@@ -180,6 +259,31 @@ const Trading = () => {
         onClose={handleCloseSell}
         onConfirm={confirmSell}
       />
+
+      {/* Animation styles */}
+      <style>{`
+        .shake {
+          animation: shake 0.4s;
+        }
+
+        @keyframes shake {
+          0% { transform: translateX(0); }
+          25% { transform: translateX(-3px); }
+          50% { transform: translateX(3px); }
+          75% { transform: translateX(-2px); }
+          100% { transform: translateX(0); }
+        }
+
+        .animate-price {
+          animation: popPrice 0.4s ease-in-out;
+        }
+
+        @keyframes popPrice {
+          0% { transform: scale(1); opacity: 0.7; }
+          50% { transform: scale(1.3); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 };
