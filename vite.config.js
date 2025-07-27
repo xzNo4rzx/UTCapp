@@ -2,10 +2,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+// Remplace cette URL par l'URL de ton API en ligne si tu veux proxy en dev
 const API_BASE = "https://api.exemple.com";
 
 export default defineConfig({
   plugins: [react()],
+  base: "/", // ✅ nécessaire pour React Router sur Render
   server: {
     proxy: {
       "/api": {
@@ -15,6 +17,8 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
-    historyApiFallback: true, // ✅ redirige toutes les routes vers index.html
+  },
+  build: {
+    outDir: "dist",
   },
 });
