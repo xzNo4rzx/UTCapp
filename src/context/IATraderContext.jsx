@@ -5,6 +5,7 @@ export const IATraderContext = createContext();
 
 export const IATraderProvider = ({ children }) => {
   const [iaName] = useState("IA-Trader");
+
   const [iaCash, setIaCash] = useState(() => {
     const stored = localStorage.getItem("ia-cash");
     return stored ? parseFloat(stored) : 10000;
@@ -78,23 +79,33 @@ export const IATraderProvider = ({ children }) => {
     const id = `ia-${dateStr}-${paddedIndex}${currentLetter}${currentIndex}`;
     localStorage.setItem("ia-nid", JSON.stringify([...stored, id]));
 
-    setIaPositions((prev) => [...prev, {
-      id,
-      symbol,
-      quantity,
-      buyPrice: price,
-      date: now.toISOString(),
-    }]);
+    setIaPositions((prev) => [
+      ...prev,
+      {
+        id,
+        symbol,
+        quantity,
+        buyPrice: price,
+        date: now.toISOString(),
+        tpPercent: 2.5,
+        slPercent: 5.0,
+      },
+    ]);
+
     setIaCash((c) => c - usdAmount);
-    setIaHistory((prev) => [{
-      id,
-      type: "buy",
-      symbol,
-      quantity,
-      buyPrice: price,
-      investment: usdAmount,
-      date: now.toISOString(),
-    }, ...prev]);
+
+    setIaHistory((prev) => [
+      {
+        id,
+        type: "buy",
+        symbol,
+        quantity,
+        buyPrice: price,
+        investment: usdAmount,
+        date: now.toISOString(),
+      },
+      ...prev,
+    ]);
   };
 
   const iaSell = (id, quantity, price) => {
@@ -107,20 +118,27 @@ export const IATraderProvider = ({ children }) => {
 
     setIaPositions((prev) =>
       prev
-        .map((p) => p.id === id ? { ...p, quantity: p.quantity - quantity } : p)
+        .map((p) =>
+          p.id === id ? { ...p, quantity: p.quantity - quantity } : p
+        )
         .filter((p) => p.quantity > 0)
     );
+
     setIaCash((c) => c + proceeds);
-    setIaHistory((prev) => [{
-      id: Date.now(),
-      type: "sell",
-      symbol: pos.symbol,
-      quantity,
-      buyPrice: pos.buyPrice,
-      sellPrice: price,
-      profit,
-      date: new Date().toISOString(),
-    }, ...prev]);
+
+    setIaHistory((prev) => [
+      {
+        id: Date.now(),
+        type: "sell",
+        symbol: pos.symbol,
+        quantity,
+        buyPrice: pos.buyPrice,
+        sellPrice: price,
+        profit,
+        date: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
   };
 
   const checkTP_SL = (prices) => {
@@ -128,21 +146,52 @@ export const IATraderProvider = ({ children }) => {
       const curr = prices[p.symbol];
       if (!curr) return;
       const perf = (curr - p.buyPrice) / p.buyPrice;
-      if (perf >= 0.03 || perf <= -0.05) {
+      const tp = p.tpPercent ?? 2.5;
+      const sl = p.slPercent ?? 5.0;
+      if (perf >= tp / 100 || perf <= -sl / 100) {
         iaSell(p.id, p.quantity, curr);
       }
     });
   };
 
-  const iaTotalProfit = iaHistory
-    .filter((t) => t.type === "sell")
-    .reduce((sum, t) => sum + t.profit, 0) +
+  const iaTotalProfit =
+    iaHistory
+      .filter((t) => t.type === "sell")
+      .reduce((sum, t) => sum + t.profit, 0) +
     iaPositions.reduce((sum, p) => {
       const curr = iaCurrentPrices[p.symbol] ?? 0;
       return sum + p.quantity * (curr - p.buyPrice);
     }, 0);
 
   const iaTotalProfitPercent = iaTotalProfit / 100;
+
+  const resetIATrader = () => {
+  const now = new Date().toISOString();
+  const ptResult = iaCash + iaPositions.reduce((sum, p) => {
+    const curr = iaCurrentPrices[p.symbol] ?? p.buyPrice;
+    return sum + p.quantity * curr;
+  }, 0);
+  const pct = ((ptResult - 10000) / 10000) * 100;
+
+  const history = JSON.parse(localStorage.getItem("ia-pt-history") || "[]");
+  const newEntry = {
+    name: iaName,
+    start: iaStart,
+    end: now,
+    result: ptResult.toFixed(2),
+    percent: pct.toFixed(2),
+  };
+  localStorage.setItem("ia-pt-history", JSON.stringify([newEntry, ...history]));
+
+  localStorage.removeItem("ia-cash");
+  localStorage.removeItem("ia-positions");
+  localStorage.removeItem("ia-history");
+  localStorage.removeItem("ia-prices");
+  localStorage.removeItem("ia-start");
+  localStorage.removeItem("ia-nid");
+
+  window.location.reload(); // recharge pour tout réinitialiser
+};
 
   return (
     <IATraderContext.Provider

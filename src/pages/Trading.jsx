@@ -4,7 +4,6 @@ import fetchPrices from "../utils/fetchPrices";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
 
-
 const Trading = () => {
   const {
     portfolioName,
@@ -27,7 +26,7 @@ const Trading = () => {
   const [sellPercent, setSellPercent] = useState(100);
   const [top5Up, setTop5Up] = useState([]);
   const [top5Down, setTop5Down] = useState([]);
-  const [updatedPrices, setUpdatedPrices] = useState({}); // animations
+  const [updatedPrices, setUpdatedPrices] = useState({});
 
   const openSell = (symbol, price) => {
     setSellSymbol(symbol);
@@ -46,18 +45,26 @@ const Trading = () => {
 
   const handleBuy = (symbol, price) => {
     const input = window.prompt(`Montant en USD à investir dans ${symbol} :`, "100");
+    const tp = window.prompt("Take Profit en % (0 = désactivé)", "0");
+    const sl = window.prompt("Stop Loss en % (0 = désactivé)", "0");
+
     const amount = parseFloat(input);
-    if (isNaN(amount) || amount <= 0) {
-      alert("Montant invalide");
+    const tpPercent = parseFloat(tp);
+    const slPercent = parseFloat(sl);
+
+    if (isNaN(amount) || amount <= 0 || isNaN(tpPercent) || isNaN(slPercent)) {
+      alert("Valeurs invalides.");
       return;
     }
+
     if (amount > cash) {
       alert("Fonds insuffisants !");
       return;
     }
-    if (window.confirm(`Confirmer achat de ${symbol} pour $${amount.toFixed(2)} (valeur actuelle : $${price.toFixed(2)}) ?`)) {
+
+    if (window.confirm(`Confirmer achat de ${symbol} pour $${amount.toFixed(2)} (TP : ${tpPercent}%, SL : ${slPercent}%) ?`)) {
       const quantity = amount / price;
-      buyPosition(symbol, quantity, price);
+      buyPosition(symbol, quantity, price, tpPercent, slPercent);
     }
   };
 
@@ -74,7 +81,6 @@ const Trading = () => {
       const merged = [...top5Up, ...top5Down, ...rest];
       const unique = Array.from(new Map(merged.map(c => [c.symbol, c])).values());
 
-      // détecter changements
       const changed = {};
       unique.forEach((c) => {
         const prev = cryptos.find((p) => p.symbol === c.symbol);
@@ -99,6 +105,25 @@ const Trading = () => {
     const interval = setInterval(handleUpdatePrices, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // ⬛︎ AUTO TP/SL
+  useEffect(() => {
+    positions.forEach((p) => {
+      const curr = currentPrices[p.symbol];
+      if (!curr) return;
+
+      const tp = p.tpPercent || 0;
+      const sl = p.slPercent || 0;
+
+      if (tp > 0 && curr >= p.buyPrice * (1 + tp / 100)) {
+        console.log(`🎯 TP atteint sur ${p.symbol}`);
+        sellPosition(p.id, p.quantity, curr);
+      } else if (sl > 0 && curr <= p.buyPrice * (1 - sl / 100)) {
+        console.log(`🛑 SL atteint sur ${p.symbol}`);
+        sellPosition(p.id, p.quantity, curr);
+      }
+    });
+  }, [currentPrices]);
 
   const knownOrder = ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOGE", "MATIC", "DOT"];
   const sortedCryptos = useMemo(() => {
@@ -126,7 +151,6 @@ const Trading = () => {
   const handleChangePercent = (e) => setSellPercent(Number(e.target.value));
   const handleSetMax = () => setSellPercent(100);
   const handleCloseSell = () => setSellModal(false);
-
   const startDate = localStorage.getItem("ptStartDate");
 
   const renderCryptoBlock = (c) => {
@@ -190,7 +214,6 @@ const Trading = () => {
         {portfolioName} | 🕒 Début : {startDate ? new Date(startDate).toLocaleString() : "—"}
       </h2>
 
-      {/* Bilan */}
       <div style={{ marginTop: "1rem" }}>
         <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
         <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
@@ -203,7 +226,6 @@ const Trading = () => {
         </div>
       </div>
 
-      {/* Update Button */}
       <div style={{ margin: "2rem 0" }}>
         <button
           id="update-btn"
@@ -260,12 +282,10 @@ const Trading = () => {
         onConfirm={confirmSell}
       />
 
-      {/* Animation styles */}
       <style>{`
         .shake {
           animation: shake 0.4s;
         }
-
         @keyframes shake {
           0% { transform: translateX(0); }
           25% { transform: translateX(-3px); }
@@ -273,11 +293,9 @@ const Trading = () => {
           75% { transform: translateX(-2px); }
           100% { transform: translateX(0); }
         }
-
         .animate-price {
           animation: popPrice 0.4s ease-in-out;
         }
-
         @keyframes popPrice {
           0% { transform: scale(1); opacity: 0.7; }
           50% { transform: scale(1.3); opacity: 1; }

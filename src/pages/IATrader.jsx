@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { IATraderContext } from "../context/IATraderContext";
 
 const IATrader = () => {
@@ -12,15 +12,22 @@ const IATrader = () => {
     iaTotalProfit,
     iaTotalProfitPercent,
     updateIaPrices,
+    resetIATrader,
   } = useContext(IATraderContext);
 
   const [startDate] = useState(() => new Date(iaStart));
+  const [ptHistory, setPtHistory] = useState([]);
   const fmt = (n) => Number(n).toFixed(2);
 
   const investedAmount = iaPositions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0);
   const activePositionsCount = iaPositions.length;
   const totalTrades = iaHistory.filter((t) => t.type === "buy").length;
   const positiveTrades = iaHistory.filter((t) => t.type === "sell" && t.profit > 0).length;
+
+  useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem("ia-pt-history") || "[]");
+    setPtHistory(stored);
+  }, []);
 
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", color: "#fff", fontFamily: "sans-serif", minHeight: "100vh" }}>
@@ -40,6 +47,23 @@ const IATrader = () => {
           }}
         >
           🔄 UPDATE PRICES NOW
+        </button>
+        <button
+          onClick={() => {
+            if (window.confirm("Confirmer la réinitialisation de l'IA Trader à 10 000 $ ?")) {
+              resetIATrader();
+            }
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: "#dc3545",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        >
+          🧨 RESET IA TRADER TO 10000$
         </button>
         <style>{`
           @keyframes shake {
@@ -143,6 +167,47 @@ const IATrader = () => {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      {/* Historique des anciens IA Trader */}
+      <section style={{ marginTop: "2rem" }}>
+        <h3>📚 Historique des anciens IA Trader</h3>
+        {ptHistory.length === 0 ? (
+          <p>Aucun PT précédent.</p>
+        ) : (
+          <>
+            <p style={{ color: "#aaa" }}>
+              Moyenne des rendements :{" "}
+              <strong style={{ color: "lightgreen" }}>
+                {
+                  (
+                    ptHistory.reduce((sum, h) => sum + parseFloat(h.percent), 0) /
+                    ptHistory.length
+                  ).toFixed(2)
+                }
+                %
+              </strong>
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              {ptHistory.map((pt, i) => (
+                <div key={i} style={{
+                  borderLeft: `6px solid ${pt.percent >= 0 ? "#0f0" : "#f00"}`,
+                  backgroundColor: "#1e1e1e",
+                  borderRadius: "8px",
+                  padding: "1rem"
+                }}>
+                  <div style={{ fontWeight: "bold" }}>{pt.name}</div>
+                  <div>Début : {new Date(pt.start).toLocaleString()}</div>
+                  <div>Fin : {new Date(pt.end).toLocaleString()}</div>
+                  <div>Résultat : ${pt.result}</div>
+                  <div style={{ color: pt.percent >= 0 ? "lightgreen" : "salmon" }}>
+                    Rendement : {pt.percent}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </section>
     </div>
