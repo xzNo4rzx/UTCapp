@@ -8,7 +8,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // proxy toutes les requêtes /api/* vers votre API
       "/api": {
         target: API_BASE,
         changeOrigin: true,
@@ -16,5 +15,6 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
+    historyApiFallback: true, // ✅ redirige toutes les routes vers index.html
   },
 });
