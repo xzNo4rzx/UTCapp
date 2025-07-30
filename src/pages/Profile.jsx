@@ -51,7 +51,6 @@ const Profile = () => {
   const handleChangePercent = (e) => setSellPercent(Number(e.target.value));
   const handleSetMax = () => setSellPercent(100);
   const handleCloseSell = () => setSellModal(false);
-
   const fmt = (n) => Number(n).toFixed(2);
 
   return (
@@ -116,15 +115,6 @@ const Profile = () => {
           >
             🔄 UPDATE PRICES NOW
           </button>
-          <style>{`
-            @keyframes shake {
-              0% { transform: translateX(0); }
-              25% { transform: translateX(-2px); }
-              50% { transform: translateX(2px); }
-              75% { transform: translateX(-2px); }
-              100% { transform: translateX(0); }
-            }
-          `}</style>
         </div>
       </section>
 
@@ -135,12 +125,16 @@ const Profile = () => {
           <p>Aucune position ouverte.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {positions.map((p, i) => {
+            {positions.map((p) => {
               const curr = currentPrices[p.symbol] ?? 0;
               const investment = p.quantity * p.buyPrice;
               const valueNow = p.quantity * curr;
               const pnl = valueNow - investment;
               const pnlPercent = ((valueNow / investment - 1) * 100);
+
+              const v = currentPrices?.__variations?.[p.symbol] || {};
+              const changeLine = `${v["5m"]?.toFixed(2)}% (5m) | ${v["1d"]?.toFixed(2)}% (1j) | ${v["7d"]?.toFixed(2)}% (7j)`;
+
               return (
                 <div key={p.id} style={{
                   borderLeft: `6px solid ${pnl >= 0 ? "#0f0" : "#f00"}`,
@@ -157,6 +151,9 @@ const Profile = () => {
                   </div>
                   <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#ccc" }}>
                     🕒 {new Date(p.date).toLocaleString()} | ID : {p.id} | Investi : ${fmt(investment)} | Achat : ${fmt(p.buyPrice)} | Actuel : ${fmt(curr)}
+                  </div>
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.9rem", color: "#aaa" }}>
+                    📊 Variation : {changeLine}
                   </div>
                   <div style={{ marginTop: "0.5rem" }}>
                     <button
@@ -187,7 +184,7 @@ const Profile = () => {
           <p>Aucun trade enregistré.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxHeight: "500px", overflowY: "auto" }}>
-            {history.map((t, i) => (
+            {history.map((t) => (
               <div key={t.id} style={{
                 borderLeft: `6px solid ${t.type === "sell" ? (t.profit >= 0 ? "#0f0" : "#f00") : "#888"}`,
                 backgroundColor: "#1e1e1e",

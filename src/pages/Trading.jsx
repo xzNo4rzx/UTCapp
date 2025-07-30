@@ -150,8 +150,6 @@ const Trading = () => {
   const renderCryptoBlock = (c) => {
     const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
     const animate = updatedPrices[c.symbol];
-    const changeLine = `${c.change5min?.toFixed(2)}% (5m) | ${c.change1d?.toFixed(2)}% (1j) | ${c.change7d?.toFixed(2)}% (7j)`;
-    const priceColor = c.change5min >= 0 ? "lightgreen" : "salmon";
 
     return (
       <div key={c.symbol} style={{
@@ -167,8 +165,10 @@ const Trading = () => {
           <div className={animate ? "animate-price" : ""} style={{ color: "#ccc", fontSize: "1rem" }}>
             ${c.currentPrice?.toFixed(4)}
           </div>
-          <div style={{ color: priceColor, fontSize: "0.95rem", lineHeight: "1.2" }}>
-            {changeLine}
+          <div style={{ fontSize: "0.9rem", color: "#ccc", lineHeight: "1.4" }}>
+            <span style={{ color: c.change5min >= 0 ? "lightgreen" : "salmon" }}>5m: {c.change5min?.toFixed(2)}%</span>{" | "}
+            <span style={{ color: c.change1d >= 0 ? "lightgreen" : "salmon" }}>1j: {c.change1d?.toFixed(2)}%</span>{" | "}
+            <span style={{ color: c.change7d >= 0 ? "lightgreen" : "salmon" }}>7j: {c.change7d?.toFixed(2)}%</span>
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem", flexWrap: "wrap", gap: "1rem" }}>

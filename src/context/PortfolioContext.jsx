@@ -1,5 +1,7 @@
 import React, { createContext, useState, useEffect } from "react";
 import axios from "axios";
+import fetchSignals from "../utils/fetchSignals";
+import { useLocation } from "react-router-dom";
 
 export const PortfolioContext = createContext();
 
@@ -18,6 +20,13 @@ const getCurrentPrices = async (symbols) => {
   }
 };
 
+const useIAActive = () => {
+  if (typeof window !== "undefined") {
+    return window.location.pathname.includes("iatrader");
+  }
+  return false;
+};
+
 export const PortfolioProvider = ({ children }) => {
   const [portfolioName, setPortfolioName] = useState(() => {
     const now = new Date();
@@ -29,94 +38,78 @@ export const PortfolioProvider = ({ children }) => {
     return name;
   });
 
-  const [cash, setCash] = useState(() => {
-    const stored = localStorage.getItem("pt-cash");
-    return stored ? parseFloat(stored) : 10000;
-  });
-
-  const [positions, setPositions] = useState(() => {
-    const stored = localStorage.getItem("pt-positions");
-    return stored ? JSON.parse(stored) : [];
-  });
-
-  const [history, setHistory] = useState(() => {
-    const stored = localStorage.getItem("pt-history");
-    return stored ? JSON.parse(stored) : [];
-  });
-
+  const [cash, setCash] = useState(() => parseFloat(localStorage.getItem("pt-cash")) || 10000);
+  const [positions, setPositions] = useState(() => JSON.parse(localStorage.getItem("pt-positions")) || []);
+  const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem("pt-history")) || []);
   const [currentPrices, setCurrentPrices] = useState({});
 
-  useEffect(() => {
-    localStorage.setItem("pt-cash", cash.toString());
-  }, [cash]);
-
-  useEffect(() => {
-    localStorage.setItem("pt-positions", JSON.stringify(positions));
-  }, [positions]);
-
-  useEffect(() => {
-    localStorage.setItem("pt-history", JSON.stringify(history));
-  }, [history]);
+  useEffect(() => localStorage.setItem("pt-cash", cash.toString()), [cash]);
+  useEffect(() => localStorage.setItem("pt-positions", JSON.stringify(positions)), [positions]);
+  useEffect(() => localStorage.setItem("pt-history", JSON.stringify(history)), [history]);
 
   const updatePrices = async () => {
     const syms = positions.map((p) => p.symbol);
-    const freshPrices = await getCurrentPrices(syms);
+    const fresh = await getCurrentPrices(syms);
     const map = {};
-    for (const sym of syms) {
-      map[sym] = freshPrices[sym]?.USD ?? null;
-    }
+    for (const sym of syms) map[sym] = fresh[sym]?.USD ?? null;
     setCurrentPrices(map);
   };
 
   useEffect(() => {
     updatePrices();
+
+    const activeIA = useIAActive();
+    if (activeIA) {
+      const loop = setInterval(async () => {
+        try {
+          const { signals } = await fetchSignals();
+          if (!signals?.length) return;
+
+          const latest = signals[0];
+          const already = positions.some(p => p.symbol === latest.crypto);
+          if (already || cash < 10) return;
+
+          const prices = await getCurrentPrices([latest.crypto]);
+          const curr = prices[latest.crypto]?.USD;
+          if (!curr) return;
+
+          const invest = cash / 3;
+          const qty = invest / curr;
+          const tp = 3, sl = 5;
+          buyPosition(latest.crypto, qty, curr, tp, sl);
+          console.log("🤖 IA Trader : achat", latest.crypto, qty, "@", curr);
+        } catch (e) {
+          console.error("IA Trader erreur :", e);
+        }
+      }, 60_000);
+      return () => clearInterval(loop);
+    }
   }, [positions]);
 
-  const investedAmount = positions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0);
+  const investedAmount = positions.reduce((s, p) => s + p.quantity * p.buyPrice, 0);
   const activePositionsCount = positions.length;
-  const totalTrades = history.filter((t) => t.type === "buy").length;
-  const positiveTrades = history.filter((t) => t.type === "sell" && t.profit > 0).length;
+  const totalTrades = history.filter(t => t.type === "buy").length;
+  const positiveTrades = history.filter(t => t.type === "sell" && t.profit > 0).length;
 
   const totalProfit =
-    history.filter((t) => t.type === "sell").reduce((sum, t) => sum + t.profit, 0) +
-    positions.reduce((sum, p) => {
-      const curr = currentPrices[p.symbol] ?? 0;
-      return sum + p.quantity * (curr - p.buyPrice);
-    }, 0);
+    history.filter((t) => t.type === "sell").reduce((s, t) => s + t.profit, 0) +
+    positions.reduce((s, p) => s + p.quantity * ((currentPrices[p.symbol] ?? 0) - p.buyPrice), 0);
 
   const totalProfitPercent = investedAmount ? (totalProfit / 10000) * 100 : 0;
 
-  const buyPosition = (symbol, quantity, price) => {
+  const buyPosition = (symbol, quantity, price, tpPercent = 0, slPercent = 0) => {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 16).replace(/[-T:]/g, "").slice(2);
     const stored = JSON.parse(localStorage.getItem("pt-nid") || "[]");
-    const currentLetter = stored.length < 9 ? "A" : "B";
-    const currentIndex = stored.length % 9 + 1;
-    const paddedIndex = (stored.length + 1).toString().padStart(3, "0");
-    const id = `${dateStr}-${paddedIndex}${currentLetter}${currentIndex}`;
+    const letter = stored.length < 9 ? "A" : "B";
+    const padded = (stored.length + 1).toString().padStart(3, "0");
+    const id = `${dateStr}-${padded}${letter}${(stored.length % 9) + 1}`;
     localStorage.setItem("pt-nid", JSON.stringify([...stored, id]));
 
     const investment = quantity * price;
-
-    setPositions((prev) => [
-      ...prev,
-      { id, symbol, quantity, buyPrice: price, date: new Date().toISOString() },
-    ]);
-
+    setPositions((prev) => [...prev, { id, symbol, quantity, buyPrice: price, date: now.toISOString(), tpPercent, slPercent }]);
     setCash((c) => c - investment);
-
-    setHistory((h) => [
-      {
-        id,
-        type: "buy",
-        symbol,
-        quantity,
-        buyPrice: price,
-        investment,
-        date: new Date().toISOString(),
-      },
-      ...h,
-    ]);
+    setHistory((h) => [{ id, type: "buy", symbol, quantity, buyPrice: price, investment, date: now.toISOString() }, ...h]);
   };
 
   const sellPosition = (positionId, quantity, sellPrice) => {
@@ -128,15 +121,9 @@ export const PortfolioProvider = ({ children }) => {
     const profit = proceeds - cost;
 
     setPositions((prev) =>
-      prev
-        .map((p) =>
-          p.id === positionId ? { ...p, quantity: p.quantity - quantity } : p
-        )
-        .filter((p) => p.quantity > 0)
+      prev.map((p) => (p.id === positionId ? { ...p, quantity: p.quantity - quantity } : p)).filter((p) => p.quantity > 0)
     );
-
     setCash((c) => c + proceeds);
-
     setHistory((h) => [
       {
         id: Date.now(),
@@ -154,27 +141,21 @@ export const PortfolioProvider = ({ children }) => {
   };
 
   const resetPortfolio = () => {
-    if (
-      window.confirm(
-        "Confirmer la réinitialisation du portefeuille à 10 000 $ ? Cela clôturera le PT actuel."
-      )
-    ) {
-      const now = new Date();
-      const base = `PT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      const stored = JSON.parse(localStorage.getItem("ptNames") || "[]");
-      const count = (stored.filter((n) => n.startsWith(base)).length + 1).toString().padStart(3, "0");
-      const name = `${base}-${count}`;
-      localStorage.setItem("ptNames", JSON.stringify([...stored, name]));
-      localStorage.removeItem("pt-nid");
-      setPortfolioName(name);
-      setCash(10000);
-      setPositions([]);
-      setHistory([]);
-      setCurrentPrices({});
-      localStorage.removeItem("pt-cash");
-      localStorage.removeItem("pt-positions");
-      localStorage.removeItem("pt-history");
-    }
+    const now = new Date();
+    const base = `PT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const stored = JSON.parse(localStorage.getItem("ptNames") || "[]");
+    const count = (stored.filter((n) => n.startsWith(base)).length + 1).toString().padStart(3, "0");
+    const name = `${base}-${count}`;
+    localStorage.setItem("ptNames", JSON.stringify([...stored, name]));
+    localStorage.removeItem("pt-nid");
+    setPortfolioName(name);
+    setCash(10000);
+    setPositions([]);
+    setHistory([]);
+    setCurrentPrices({});
+    localStorage.removeItem("pt-cash");
+    localStorage.removeItem("pt-positions");
+    localStorage.removeItem("pt-history");
   };
 
   return (

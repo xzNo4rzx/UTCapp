@@ -1,4 +1,3 @@
-// src/pages/Analysis.jsx
 import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { Line } from "react-chartjs-2";
@@ -24,7 +23,6 @@ const periodToApi = {
   "6m": { limit: 180, aggregate: 1, unit: "day" },
 };
 
-// Liste des cryptos disponibles
 const SYMBOLS = ["BTC", "ETH", "SOL", "ADA", "MATIC"];
 
 const Analysis = () => {
@@ -33,13 +31,11 @@ const Analysis = () => {
   const [dataPoints, setDataPoints] = useState([]);
   const [commentary, setCommentary] = useState("");
 
-  // 1) Chargement des données historiques
+  // 1) Récupération des données historiques
   useEffect(() => {
     const fetchHistorical = async () => {
       try {
         const params = periodToApi[period];
-        if (!params) throw new Error(`Période inconnue : ${period}`);
-
         const resp = await axios.get(
           `https://min-api.cryptocompare.com/data/v2/histo${params.unit}`,
           { params: { fsym: symbol, tsym: "USD", ...params } }
@@ -48,16 +44,13 @@ const Analysis = () => {
         const points = raw.map(p => ({ time: p.time * 1000, close: p.close }));
         setDataPoints(points);
 
-        // 2) Génération du commentaire IA
         if (points.length > 1) {
           const first = points[0].close;
-          const last  = points[points.length - 1].close;
+          const last = points[points.length - 1].close;
           const change = ((last - first) / first) * 100;
           setCommentary(
             `Sur la période ${period}, ${symbol} a ${change >= 0 ? "gagné" : "perdu"} ${Math.abs(change).toFixed(2)}%.`
           );
-        } else {
-          setCommentary("");
         }
       } catch (err) {
         console.error("Erreur fetch historique :", err.message);
@@ -65,24 +58,20 @@ const Analysis = () => {
         setCommentary("");
       }
     };
-
     fetchHistorical();
   }, [symbol, period]);
 
-  // 3) Calcul des signaux (croisement de moyennes mobiles 5/20)
+  // 2) Analyse simple : croisement SMA(5) / SMA(20)
   const signals = useMemo(() => {
     const shortW = 5, longW = 20;
     if (dataPoints.length < longW) return [];
-
     const closes = dataPoints.map(p => p.close);
     const sma = (arr, w) => arr.map((_, i) =>
       i < w - 1 ? null : arr.slice(i - w + 1, i + 1).reduce((a, b) => a + b, 0) / w
     );
-
     const sma5  = sma(closes, shortW);
     const sma20 = sma(closes, longW);
     const sigs = [];
-
     for (let i = 1; i < dataPoints.length; i++) {
       if (sma5[i - 1] != null && sma20[i - 1] != null) {
         if (sma5[i] > sma20[i] && sma5[i - 1] <= sma20[i - 1])
@@ -94,7 +83,7 @@ const Analysis = () => {
     return sigs;
   }, [dataPoints]);
 
-  // 4) Préparation des données Chart.js
+  // 3) Préparation du graphique
   const chartData = useMemo(() => ({
     datasets: [
       {
@@ -127,15 +116,8 @@ const Analysis = () => {
   const options = {
     responsive: true,
     scales: {
-      x: {
-        type: "time",
-        grid: { color: "#333" },
-        ticks: { color: "#ccc" },
-      },
-      y: {
-        grid: { color: "#333" },
-        ticks: { color: "#ccc" },
-      },
+      x: { type: "time", grid: { color: "#333" }, ticks: { color: "#ccc" } },
+      y: { grid: { color: "#333" }, ticks: { color: "#ccc" } },
     },
     plugins: {
       legend: { labels: { color: "#ccc" } },
@@ -147,30 +129,20 @@ const Analysis = () => {
     <div style={{ padding: "2rem", background: "#111", minHeight: "100vh", color: "#eee", fontFamily: "sans-serif" }}>
       <h1>📊 Analyse {symbol}/USD — {period}</h1>
 
-      {/* Sélecteurs */}
+      {/* Sélection crypto et période */}
       <div style={{ marginBottom: "1rem" }}>
-        <select
-          value={symbol}
-          onChange={e => setSymbol(e.target.value)}
-          style={{ padding: "0.5rem", marginRight: "1rem", background: "#222", color: "#eee", border: "1px solid #444" }}
-        >
+        <select value={symbol} onChange={e => setSymbol(e.target.value)} style={{ padding: "0.5rem", marginRight: "1rem", background: "#222", color: "#eee", border: "1px solid #444" }}>
           {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         {["1h","1d","7d","1m","6m"].map(p => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            style={{
-              marginRight: "0.5rem",
-              padding: "0.5rem 1rem",
-              background: p === period ? "#10b981" : "#222",
-              color: p === period ? "#000" : "#ccc",
-              border: "1px solid #444",
-              cursor: "pointer",
-            }}
-          >
-            {p}
-          </button>
+          <button key={p} onClick={() => setPeriod(p)} style={{
+            marginRight: "0.5rem",
+            padding: "0.5rem 1rem",
+            background: p === period ? "#10b981" : "#222",
+            color: p === period ? "#000" : "#ccc",
+            border: "1px solid #444",
+            cursor: "pointer",
+          }}>{p}</button>
         ))}
       </div>
 
@@ -190,9 +162,7 @@ const Analysis = () => {
 
       {/* Commentaire IA */}
       {commentary && (
-        <p style={{ marginTop: "1rem", color: "#aaa" }}>
-          {commentary}
-        </p>
+        <p style={{ marginTop: "1rem", color: "#aaa" }}>{commentary}</p>
       )}
     </div>
   );

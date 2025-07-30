@@ -1,197 +1,169 @@
-import React, { createContext, useEffect, useState } from "react";
-import fetchPrices from "../utils/fetchPrices";
+import React, { createContext, useState, useEffect } from "react";
+import axios from "axios";
 
 export const IATraderContext = createContext();
 
+const API_KEY = import.meta.env.VITE_CRYPTOCOMPARE_API_KEY;
+const BASE_URL = "https://min-api.cryptocompare.com/data";
+
+const getPrice = async (symbol) => {
+  try {
+    const { data } = await axios.get(`${BASE_URL}/price`, {
+      params: { fsym: symbol, tsyms: "USD", api_key: API_KEY },
+    });
+    return data?.USD ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const IATraderProvider = ({ children }) => {
-  const [iaName] = useState("IA-Trader");
-
-  const [iaCash, setIaCash] = useState(() => {
-    const stored = localStorage.getItem("ia-cash");
-    return stored ? parseFloat(stored) : 10000;
+  const [iaName, setIaName] = useState(() => {
+    const now = new Date();
+    const base = `IAPT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const stored = JSON.parse(localStorage.getItem("ia-names") || "[]");
+    const count = (stored.filter(n => n.startsWith(base)).length + 1).toString().padStart(3, "0");
+    const name = `${base}-${count}`;
+    localStorage.setItem("ia-names", JSON.stringify([...stored, name]));
+    return name;
   });
 
-  const [iaPositions, setIaPositions] = useState(() => {
-    const stored = localStorage.getItem("ia-positions");
-    return stored ? JSON.parse(stored) : [];
-  });
-
-  const [iaHistory, setIaHistory] = useState(() => {
-    const stored = localStorage.getItem("ia-history");
-    return stored ? JSON.parse(stored) : [];
-  });
-
-  const [iaCurrentPrices, setIaCurrentPrices] = useState(() => {
-    const stored = localStorage.getItem("ia-prices");
-    return stored ? JSON.parse(stored) : {};
-  });
-
-  const [iaStart] = useState(() => {
-    const stored = localStorage.getItem("ia-start");
-    if (stored) return stored;
-    const now = new Date().toISOString();
-    localStorage.setItem("ia-start", now);
-    return now;
-  });
-
-  useEffect(() => localStorage.setItem("ia-cash", iaCash), [iaCash]);
-  useEffect(() => localStorage.setItem("ia-positions", JSON.stringify(iaPositions)), [iaPositions]);
-  useEffect(() => localStorage.setItem("ia-history", JSON.stringify(iaHistory)), [iaHistory]);
-  useEffect(() => localStorage.setItem("ia-prices", JSON.stringify(iaCurrentPrices)), [iaCurrentPrices]);
+  const [iaStart] = useState(() => new Date().toISOString());
+  const [iaCash, setIaCash] = useState(() => 10000);
+  const [iaPositions, setIaPositions] = useState([]);
+  const [iaHistory, setIaHistory] = useState([]);
+  const [iaCurrentPrices, setIaCurrentPrices] = useState({});
+  const [lastSignalId, setLastSignalId] = useState(null);
 
   const updateIaPrices = async () => {
-    try {
-      const { top5Up, top5Down, rest } = await fetchPrices();
-      const merged = [...top5Up, ...top5Down, ...rest];
-      const prices = {};
-      merged.forEach((c) => {
-        prices[c.symbol] = c.currentPrice;
-      });
-      setIaCurrentPrices(prices);
-
-      const now = Date.now();
-      const lastBuy = iaHistory.find((t) => t.type === "buy");
-      const lastBuyTime = lastBuy ? new Date(lastBuy.date).getTime() : 0;
-
-      if (iaPositions.length === 0 && now - lastBuyTime > 5 * 60 * 1000) {
-        const candidate = top5Up[0];
-        if (candidate && iaCash >= 100) {
-          iaBuy(candidate.symbol, candidate.currentPrice, 100);
-        }
-      }
-
-      checkTP_SL(prices);
-    } catch (err) {
-      console.error("Erreur update IA :", err);
+    const syms = iaPositions.map(p => p.symbol);
+    const priceMap = {};
+    for (const sym of syms) {
+      const price = await getPrice(sym);
+      if (price) priceMap[sym] = price;
     }
+    setIaCurrentPrices(priceMap);
   };
 
-  const iaBuy = (symbol, price, usdAmount) => {
-    if (usdAmount > iaCash) return;
-    const quantity = usdAmount / price;
+  const buy = async (symbol, price) => {
+    const quantity = (iaCash / 3) / price;
+    const id = `${Date.now()}-${symbol}`;
+    const investment = quantity * price;
 
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 16).replace(/[-T:]/g, "").slice(2);
-    const stored = JSON.parse(localStorage.getItem("ia-nid") || "[]");
-    const currentLetter = stored.length < 9 ? "A" : "B";
-    const currentIndex = stored.length % 9 + 1;
-    const paddedIndex = (stored.length + 1).toString().padStart(3, "0");
-    const id = `ia-${dateStr}-${paddedIndex}${currentLetter}${currentIndex}`;
-    localStorage.setItem("ia-nid", JSON.stringify([...stored, id]));
-
-    setIaPositions((prev) => [
+    setIaPositions(prev => [
       ...prev,
-      {
-        id,
-        symbol,
-        quantity,
-        buyPrice: price,
-        date: now.toISOString(),
-        tpPercent: 2.5,
-        slPercent: 5.0,
-      },
+      { id, symbol, quantity, buyPrice: price, date: new Date().toISOString(), tp: 3, sl: 5 }
     ]);
-
-    setIaCash((c) => c - usdAmount);
-
-    setIaHistory((prev) => [
+    setIaCash(c => c - investment);
+    setIaHistory(h => [
       {
         id,
         type: "buy",
         symbol,
         quantity,
         buyPrice: price,
-        investment: usdAmount,
-        date: now.toISOString(),
+        investment,
+        date: new Date().toISOString()
       },
-      ...prev,
+      ...h,
     ]);
   };
 
-  const iaSell = (id, quantity, price) => {
-    const pos = iaPositions.find((p) => p.id === id);
+  const sell = (positionId, quantity, sellPrice) => {
+    const pos = iaPositions.find(p => p.id === positionId);
     if (!pos || quantity > pos.quantity) return;
-
-    const proceeds = quantity * price;
+    const proceeds = quantity * sellPrice;
     const cost = quantity * pos.buyPrice;
     const profit = proceeds - cost;
 
-    setIaPositions((prev) =>
+    setIaPositions(prev =>
       prev
-        .map((p) =>
-          p.id === id ? { ...p, quantity: p.quantity - quantity } : p
-        )
-        .filter((p) => p.quantity > 0)
+        .map(p => p.id === positionId ? { ...p, quantity: p.quantity - quantity } : p)
+        .filter(p => p.quantity > 0)
     );
-
-    setIaCash((c) => c + proceeds);
-
-    setIaHistory((prev) => [
+    setIaCash(c => c + proceeds);
+    setIaHistory(h => [
       {
         id: Date.now(),
         type: "sell",
         symbol: pos.symbol,
         quantity,
         buyPrice: pos.buyPrice,
-        sellPrice: price,
+        sellPrice,
         profit,
-        date: new Date().toISOString(),
+        investment: cost,
+        date: new Date().toISOString()
       },
-      ...prev,
+      ...h,
     ]);
   };
 
-  const checkTP_SL = (prices) => {
-    iaPositions.forEach((p) => {
-      const curr = prices[p.symbol];
-      if (!curr) return;
-      const perf = (curr - p.buyPrice) / p.buyPrice;
-      const tp = p.tpPercent ?? 2.5;
-      const sl = p.slPercent ?? 5.0;
-      if (perf >= tp / 100 || perf <= -sl / 100) {
-        iaSell(p.id, p.quantity, curr);
-      }
-    });
+  const resetIATrader = () => {
+    const now = new Date();
+    const pt = {
+      name: iaName,
+      start: iaStart,
+      end: now.toISOString(),
+      result: (iaCash + investedAmount).toFixed(2),
+      percent: (((iaCash + investedAmount - 10000) / 10000) * 100).toFixed(2)
+    };
+    const prev = JSON.parse(localStorage.getItem("ia-pt-history") || "[]");
+    localStorage.setItem("ia-pt-history", JSON.stringify([pt, ...prev]));
+    setIaCash(10000);
+    setIaPositions([]);
+    setIaHistory([]);
+    setIaCurrentPrices({});
+    const base = `IAPT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const stored = JSON.parse(localStorage.getItem("ia-names") || "[]");
+    const count = (stored.filter(n => n.startsWith(base)).length + 1).toString().padStart(3, "0");
+    const name = `${base}-${count}`;
+    localStorage.setItem("ia-names", JSON.stringify([...stored, name]));
+    setIaName(name);
   };
 
+  useEffect(() => {
+    updateIaPrices();
+  }, [iaPositions]);
+
+  // 🔁 Exécution automatique sur signal
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const res = await fetch("/utcapp/signals");
+      const json = await res.json();
+      if (Array.isArray(json) && json.length > 0) {
+        const newest = json[json.length - 1];
+        if (newest.timestamp !== lastSignalId && newest.type !== "CONTEXT") {
+          const price = await getPrice(newest.crypto.split("/")[0]);
+          if (price) await buy(newest.crypto.split("/")[0], price);
+          setLastSignalId(newest.timestamp);
+        }
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [lastSignalId]);
+
+  // 🧠 TP/SL en continu
+  useEffect(() => {
+    const interval = setInterval(() => {
+      iaPositions.forEach(p => {
+        const curr = iaCurrentPrices[p.symbol] ?? 0;
+        if (p.tp && curr >= p.buyPrice * (1 + p.tp / 100)) sell(p.id, p.quantity, curr);
+        else if (p.sl && curr <= p.buyPrice * (1 - p.sl / 100)) sell(p.id, p.quantity, curr);
+      });
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [iaCurrentPrices, iaPositions]);
+
+  const investedAmount = iaPositions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0);
+
   const iaTotalProfit =
-    iaHistory
-      .filter((t) => t.type === "sell")
-      .reduce((sum, t) => sum + t.profit, 0) +
+    iaHistory.filter(t => t.type === "sell").reduce((sum, t) => sum + t.profit, 0) +
     iaPositions.reduce((sum, p) => {
       const curr = iaCurrentPrices[p.symbol] ?? 0;
       return sum + p.quantity * (curr - p.buyPrice);
     }, 0);
 
-  const iaTotalProfitPercent = iaTotalProfit / 100;
-
-  const resetIATrader = () => {
-  const now = new Date().toISOString();
-  const ptResult = iaCash + iaPositions.reduce((sum, p) => {
-    const curr = iaCurrentPrices[p.symbol] ?? p.buyPrice;
-    return sum + p.quantity * curr;
-  }, 0);
-  const pct = ((ptResult - 10000) / 10000) * 100;
-
-  const history = JSON.parse(localStorage.getItem("ia-pt-history") || "[]");
-  const newEntry = {
-    name: iaName,
-    start: iaStart,
-    end: now,
-    result: ptResult.toFixed(2),
-    percent: pct.toFixed(2),
-  };
-  localStorage.setItem("ia-pt-history", JSON.stringify([newEntry, ...history]));
-
-  localStorage.removeItem("ia-cash");
-  localStorage.removeItem("ia-positions");
-  localStorage.removeItem("ia-history");
-  localStorage.removeItem("ia-prices");
-  localStorage.removeItem("ia-start");
-  localStorage.removeItem("ia-nid");
-
-  window.location.reload(); // recharge pour tout réinitialiser
-};
+  const iaTotalProfitPercent = investedAmount ? (iaTotalProfit / 10000) * 100 : 0;
 
   return (
     <IATraderContext.Provider
@@ -205,6 +177,7 @@ export const IATraderProvider = ({ children }) => {
         iaTotalProfit,
         iaTotalProfitPercent,
         updateIaPrices,
+        resetIATrader,
       }}
     >
       {children}

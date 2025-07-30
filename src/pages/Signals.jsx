@@ -1,3 +1,4 @@
+// src/pages/Signals.jsx
 import React, { useEffect, useState } from "react";
 import fetchSignals from "../utils/fetchSignals";
 
@@ -7,10 +8,9 @@ const Signals = () => {
   useEffect(() => {
     const loadSignals = async () => {
       const data = await fetchSignals();
-      if (Array.isArray(data)) {
-        const sorted = [...data].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setSignals(sorted);
-      }
+      const raw = Array.isArray(data?.signals) ? data.signals : data;
+      const sorted = [...raw].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setSignals(sorted);
     };
     loadSignals();
   }, []);
@@ -33,11 +33,12 @@ const Signals = () => {
 
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", minHeight: "100vh", color: "#fff", fontFamily: "sans-serif" }}>
-      <h1>🚨 Signaux IA</h1>
+      <h1 style={{ marginBottom: "1rem" }}>🚨 Signaux IA</h1>
+
       {signals.length === 0 ? (
         <p style={{ marginTop: "2rem", color: "#888" }}>Aucun signal pour l’instant.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "2rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {signals.map((s, i) => (
             <div
               key={i}
@@ -47,19 +48,29 @@ const Signals = () => {
                 borderRadius: "8px",
                 padding: "1rem",
                 width: "100%",
-                boxSizing: "border-box"
+                boxSizing: "border-box",
               }}
             >
+              {/* 🔷 En-tête signal */}
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
-                <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{s.crypto}</div>
-                <div style={{ color: "#ccc", fontSize: "1rem" }}>{s.type_ia || s.type}</div>
+                <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>{s.crypto}</div>
+                <div style={{ color: "#ccc", fontSize: "1rem" }}>
+                  🧠 {s.type_ia || s.type}
+                </div>
                 <div style={{ color: getRiskColor(s.risk), fontSize: "1rem" }}>
                   Risque : {s.risk}
                 </div>
               </div>
-              <div style={{ fontSize: "0.9rem", color: "#aaa", marginTop: "0.25rem" }}>
-                🧠 Score IA : {fmt(s.score)} — {new Date(s.timestamp).toLocaleString()}
+
+              {/* 🔍 Score et date */}
+              <div style={{ fontSize: "0.9rem", color: "#aaa", marginTop: "0.3rem" }}>
+                📊 Score IA : {fmt(s.score)} / 5
+                {s.score20 !== undefined && ` | Score global : ${fmt(s.score20)} / 20`}
+                <br />
+                🕒 {new Date(s.timestamp).toLocaleString()}
               </div>
+
+              {/* 📝 Explication détaillée */}
               {Array.isArray(s.explanation) && (
                 <ul style={{ marginTop: "0.5rem", color: "#ddd", fontSize: "0.95rem", lineHeight: "1.4", paddingLeft: "1.2rem" }}>
                   {s.explanation.map((line, j) => (
@@ -67,6 +78,18 @@ const Signals = () => {
                   ))}
                 </ul>
               )}
+
+              {/* 🔗 Lien TradingView */}
+              <div style={{ marginTop: "0.5rem" }}>
+                <a
+                  href={`https://www.tradingview.com/symbols/${s.crypto?.replace("/", "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none" }}
+                >
+                  → Voir sur TradingView
+                </a>
+              </div>
             </div>
           ))}
         </div>
