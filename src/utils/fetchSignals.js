@@ -4,20 +4,19 @@ const fetchSignals = async () => {
     const res = await fetch("https://utc-ai-signal-api.onrender.com/utcapp/signals");
     const data = await res.json();
 
+    // On renvoie directement la liste
     if (Array.isArray(data)) {
-      // ancien format brut : on convertit
-      return { signals: data };
-    }
-
-    if (Array.isArray(data.signals)) {
-      // format déjà correct
       return data;
     }
 
-    return { signals: [] };
+    if (Array.isArray(data.signals)) {
+      return data.signals;
+    }
+
+    return [];
   } catch (err) {
     console.error("❌ Erreur fetch /utcapp/signals", err);
-    return { signals: [] };
+    return [];
   }
 };
 
