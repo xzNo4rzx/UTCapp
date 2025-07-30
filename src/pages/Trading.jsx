@@ -1,4 +1,3 @@
-// src/pages/Trading.jsx
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import fetchPrices from "../utils/fetchPrices";
 import { PortfolioContext } from "../context/PortfolioContext";
@@ -106,12 +105,10 @@ const Trading = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // ⬛︎ AUTO TP/SL
   useEffect(() => {
     positions.forEach((p) => {
       const curr = currentPrices[p.symbol];
       if (!curr) return;
-
       const tp = p.tpPercent || 0;
       const sl = p.slPercent || 0;
 
@@ -142,10 +139,7 @@ const Trading = () => {
       const curr = currentPrices?.[p.symbol] ?? 0;
       return sum + p.quantity * curr;
     }, 0);
-    return {
-      count: positions?.length ?? 0,
-      value: total,
-    };
+    return { count: positions?.length ?? 0, value: total };
   }, [positions, currentPrices]);
 
   const handleChangePercent = (e) => setSellPercent(Number(e.target.value));
@@ -155,12 +149,13 @@ const Trading = () => {
 
   const renderCryptoBlock = (c) => {
     const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
-    const priceColor = c.changePercent >= 0 ? "lightgreen" : "salmon";
     const animate = updatedPrices[c.symbol];
+    const changeLine = `${c.change5min?.toFixed(2)}% (5m) | ${c.change1d?.toFixed(2)}% (1j) | ${c.change7d?.toFixed(2)}% (7j)`;
+    const priceColor = c.change5min >= 0 ? "lightgreen" : "salmon";
 
     return (
       <div key={c.symbol} style={{
-        borderLeft: `6px solid ${c.changePercent >= 0 ? "#0f0" : "#f00"}`,
+        borderLeft: `6px solid ${c.change5min >= 0 ? "#0f0" : "#f00"}`,
         backgroundColor: "#1e1e1e",
         borderRadius: "8px",
         padding: "1rem",
@@ -172,36 +167,14 @@ const Trading = () => {
           <div className={animate ? "animate-price" : ""} style={{ color: "#ccc", fontSize: "1rem" }}>
             ${c.currentPrice?.toFixed(4)}
           </div>
-          <div style={{ color: priceColor, fontSize: "1rem" }}>{c.changePercent.toFixed(2)}%</div>
+          <div style={{ color: priceColor, fontSize: "0.95rem", lineHeight: "1.2" }}>
+            {changeLine}
+          </div>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem", flexWrap: "wrap", gap: "1rem" }}>
-          <button
-            onClick={() => handleBuy(c.symbol, c.currentPrice)}
-            style={{ padding: "6px 12px", backgroundColor: "#4ea8de", color: "#fff", border: "none", borderRadius: "4px" }}
-          >
-            ACHAT
-          </button>
-          <button
-            onClick={() => openSell(c.symbol, c.currentPrice)}
-            disabled={!hasPosition}
-            style={{
-              backgroundColor: hasPosition ? "#dc3545" : "#555",
-              color: "#fff",
-              padding: "6px 12px",
-              border: "none",
-              borderRadius: "4px",
-            }}
-          >
-            VENTE
-          </button>
-          <a
-            href={`https://www.tradingview.com/symbols/${c.symbol}USD`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none", alignSelf: "center" }}
-          >
-            → TradingView
-          </a>
+          <button onClick={() => handleBuy(c.symbol, c.currentPrice)} style={{ padding: "6px 12px", backgroundColor: "#4ea8de", color: "#fff", border: "none", borderRadius: "4px" }}>ACHAT</button>
+          <button onClick={() => openSell(c.symbol, c.currentPrice)} disabled={!hasPosition} style={{ backgroundColor: hasPosition ? "#dc3545" : "#555", color: "#fff", padding: "6px 12px", border: "none", borderRadius: "4px" }}>VENTE</button>
+          <a href={`https://www.tradingview.com/symbols/${c.symbol}USD`} target="_blank" rel="noreferrer" style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none", alignSelf: "center" }}>→ TradingView</a>
         </div>
       </div>
     );
@@ -281,27 +254,6 @@ const Trading = () => {
         onClose={handleCloseSell}
         onConfirm={confirmSell}
       />
-
-      <style>{`
-        .shake {
-          animation: shake 0.4s;
-        }
-        @keyframes shake {
-          0% { transform: translateX(0); }
-          25% { transform: translateX(-3px); }
-          50% { transform: translateX(3px); }
-          75% { transform: translateX(-2px); }
-          100% { transform: translateX(0); }
-        }
-        .animate-price {
-          animation: popPrice 0.4s ease-in-out;
-        }
-        @keyframes popPrice {
-          0% { transform: scale(1); opacity: 0.7; }
-          50% { transform: scale(1.3); opacity: 1; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 };

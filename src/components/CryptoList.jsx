@@ -6,20 +6,28 @@ const formatPrice = (value) => {
   return value.toFixed(6);
 };
 
+const formatPercent = (value) => {
+  const fixed = value?.toFixed(2);
+  const color = value >= 0 ? "lightgreen" : "salmon";
+  return <span style={{ color }}>{fixed}%</span>;
+};
+
 const CryptoList = ({ cryptos, positions, onBuy, onOpenSell }) => {
   return (
     <div>
       <h3 style={{ color: "#fff" }}>🧾 Autres cryptos</h3>
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
           <thead>
-            <tr>
-              <th style={{ textAlign: "left", padding: "6px" }}>Symbole</th>
-              <th style={{ textAlign: "left", padding: "6px" }}>Prix</th>
-              <th style={{ textAlign: "left", padding: "6px" }}>Variation (5min)</th>
-              <th style={{ textAlign: "left", padding: "6px" }}>Achat</th>
-              <th style={{ textAlign: "left", padding: "6px" }}>Vente</th>
-              <th style={{ textAlign: "left", padding: "6px" }}>TradingView</th>
+            <tr style={{ backgroundColor: "#333", color: "#fff" }}>
+              <th style={{ padding: "6px" }}>Symbole</th>
+              <th style={{ padding: "6px" }}>Prix</th>
+              <th style={{ padding: "6px" }}>5min</th>
+              <th style={{ padding: "6px" }}>1j</th>
+              <th style={{ padding: "6px" }}>7j</th>
+              <th style={{ padding: "6px" }}>Achat</th>
+              <th style={{ padding: "6px" }}>Vente</th>
+              <th style={{ padding: "6px" }}>TradingView</th>
             </tr>
           </thead>
           <tbody>
@@ -29,22 +37,28 @@ const CryptoList = ({ cryptos, positions, onBuy, onOpenSell }) => {
                 <tr key={c.symbol} style={{ backgroundColor: i % 2 === 0 ? "#1e1e1e" : "#252525" }}>
                   <td style={{ padding: "6px", color: "#fff" }}>{c.symbol}</td>
                   <td style={{ padding: "6px", color: "#ccc" }}>${formatPrice(c.currentPrice)}</td>
-                  <td style={{ padding: "6px", color: c.changePercent >= 0 ? "lightgreen" : "salmon" }}>
-                    {c.changePercent?.toFixed(2)}%
-                  </td>
-                  <td>
+                  <td style={{ padding: "6px" }}>{formatPercent(c.change5min)}</td>
+                  <td style={{ padding: "6px" }}>{formatPercent(c.change1d)}</td>
+                  <td style={{ padding: "6px" }}>{formatPercent(c.change7d)}</td>
+                  <td style={{ padding: "6px" }}>
                     <button onClick={() => onBuy(c.symbol, c.currentPrice)}>ACHAT</button>
                   </td>
-                  <td>
+                  <td style={{ padding: "6px" }}>
                     <button
                       onClick={() => onOpenSell(c.symbol, c.currentPrice)}
                       disabled={!hasPosition}
-                      style={{ backgroundColor: hasPosition ? "#dc3545" : "#555", color: "#fff", padding: "4px 8px" }}
+                      style={{
+                        backgroundColor: hasPosition ? "#dc3545" : "#555",
+                        color: "#fff",
+                        padding: "4px 8px",
+                        border: "none",
+                        borderRadius: "4px"
+                      }}
                     >
                       VENTE
                     </button>
                   </td>
-                  <td>
+                  <td style={{ padding: "6px" }}>
                     <a
                       href={`https://www.tradingview.com/symbols/${c.symbol}USD`}
                       target="_blank"
