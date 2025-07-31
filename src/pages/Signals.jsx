@@ -1,4 +1,3 @@
-// src/pages/Signals.jsx
 import React, { useEffect, useState } from "react";
 import fetchSignals from "../utils/fetchSignals";
 
@@ -22,14 +21,14 @@ const Signals = () => {
     return "#aaa";
   };
 
-  const getRiskColor = (risk) => {
+  const getRiskColor = (risk = "") => {
     if (risk.includes("Faible")) return "lightgreen";
     if (risk.includes("Moyen")) return "orange";
     if (risk.includes("Élevé")) return "salmon";
     return "#ccc";
   };
 
-  const fmt = (v) => Number(v).toFixed(2);
+  const fmt = (v) => Number(v || 0).toFixed(2);
 
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", minHeight: "100vh", color: "#fff", fontFamily: "sans-serif" }}>
@@ -53,12 +52,12 @@ const Signals = () => {
             >
               {/* 🔷 En-tête signal */}
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
-                <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>{s.crypto}</div>
+                <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>{s.crypto || "—"}</div>
                 <div style={{ color: "#ccc", fontSize: "1rem" }}>
-                  🧠 {s.type_ia || s.type}
+                  🧠 {s.type_ia || s.type || "inconnu"}
                 </div>
                 <div style={{ color: getRiskColor(s.risk), fontSize: "1rem" }}>
-                  Risque : {s.risk}
+                  Risque : {s.risk || "—"}
                 </div>
               </div>
 
@@ -82,7 +81,7 @@ const Signals = () => {
               {/* 🔗 Lien TradingView */}
               <div style={{ marginTop: "0.5rem" }}>
                 <a
-                  href={`https://www.tradingview.com/symbols/${s.crypto?.replace("/", "")}`}
+                  href={`https://www.tradingview.com/symbols/${s.crypto?.replace("/", "")}USD`}
                   target="_blank"
                   rel="noreferrer"
                   style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none" }}
