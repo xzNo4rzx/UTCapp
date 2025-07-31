@@ -25,21 +25,19 @@ const Profile = () => {
   const [sellSymbol, setSellSymbol] = useState("");
   const [sellPrice, setSellPrice] = useState(0);
   const [sellPercent, setSellPercent] = useState(100);
-  const [startDate] = useState(() => {
+  const [startDate, setStartDate] = useState(() => {
     const stored = localStorage.getItem("ptStartDate");
     return stored ? new Date(stored) : new Date();
   });
 
-  // État pour stocker les variations 5m, 1j et 7j
+  // chargé depuis /utcapp/variations
   const [variations, setVariations] = useState({});
 
   useEffect(() => {
-    // On garde la date de début en localStorage
     localStorage.setItem("ptStartDate", startDate.toISOString());
   }, [startDate]);
 
   useEffect(() => {
-    // On va chercher les variations via l'endpoint UTCapp
     const fetchVariations = async () => {
       try {
         const resp = await axios.get("/utcapp/variations");
@@ -77,19 +75,12 @@ const Profile = () => {
         </h2>
         <button
           onClick={() => {
-            if (window.confirm("Confirmer la remise à zéro ? Cela clôturera le portefeuille actuel.")) {
+            if (window.confirm("Confirmer la remise à zéro ?")) {
               localStorage.removeItem("ptStartDate");
               resetPortfolio();
             }
           }}
-          style={{
-            padding: "6px 12px",
-            backgroundColor: "#dc3545",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
+          style={{ padding: "6px 12px", backgroundColor: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
         >
           🧨 RESET PT TO 10000$
         </button>
@@ -140,56 +131,47 @@ const Profile = () => {
         {positions.length === 0 ? (
           <p>Aucune position ouverte.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {positions.map((p) => {
-              const curr = currentPrices[p.symbol] ?? 0;
-              const inv = p.quantity * p.buyPrice;
-              const valueNow = p.quantity * curr;
-              const pnl = valueNow - inv;
-              const pnlPct = (valueNow / inv - 1) * 100;
+          positions.map((p) => {
+            const curr = currentPrices[p.symbol] ?? 0;
+            const inv = p.quantity * p.buyPrice;
+            const valueNow = p.quantity * curr;
+            const pnl = valueNow - inv;
+            const pnlPct = ((valueNow / inv) - 1) * 100;
+            const v = variations[p.symbol] || {};
+            const changeLine = `${(v["5m"] ?? 0).toFixed(2)}% (5m) | ${(v["1d"] ?? 0).toFixed(2)}% (1j) | ${(v["7d"] ?? 0).toFixed(2)}% (7j)`;
 
-              const v = variations[p.symbol] || {};
-              const changeLine = `${(v["5m"] ?? 0).toFixed(2)}% (5m) | ${(v["1d"] ?? 0).toFixed(2)}% (1j) | ${(v["7d"] ?? 0).toFixed(2)}% (7j)`;
-
-              return (
-                <div key={p.id} style={{
-                  borderLeft: `6px solid ${pnl >= 0 ? "#0f0" : "#f00"}`,
-                  backgroundColor: "#1e1e1e",
-                  borderRadius: "8px",
-                  padding: "1rem",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
-                    <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{p.symbol}</div>
-                    <div style={{ color: curr >= p.buyPrice ? "lightgreen" : "salmon" }}>${fmt(curr)}</div>
-                    <div style={{ color: pnl >= 0 ? "lightgreen" : "salmon" }}>
-                      {fmt(pnl)}$ / {fmt(pnlPct)}%
-                    </div>
-                  </div>
-                  <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#ccc" }}>
-                    🕒 {new Date(p.date).toLocaleString()} | ID : {p.id} | Investi : ${fmt(inv)} | Achat : ${fmt(p.buyPrice)}
-                  </div>
-                  <div style={{ marginTop: "0.25rem", fontSize: "0.9rem", color: "#aaa" }}>
-                    📊 Variation : {changeLine}
-                  </div>
-                  <div style={{ marginTop: "0.5rem" }}>
-                    <button
-                      onClick={() => handleSell(p.symbol, curr)}
-                      style={{
-                        padding: "6px 12px",
-                        backgroundColor: "#dc3545",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "4px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      VENDRE
-                    </button>
+            return (
+              <div key={p.id} style={{
+                borderLeft: `6px solid ${pnl >= 0 ? "#0f0" : "#f00"}`,
+                backgroundColor: "#1e1e1e",
+                borderRadius: "8px",
+                padding: "1rem",
+                marginBottom: "1rem"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{p.symbol}</div>
+                  <div style={{ color: curr >= p.buyPrice ? "lightgreen" : "salmon" }}>${fmt(curr)}</div>
+                  <div style={{ color: pnl >= 0 ? "lightgreen" : "salmon" }}>
+                    {fmt(pnl)}$ / {fmt(pnlPct)}%
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#ccc" }}>
+                  🕒 {new Date(p.date).toLocaleString()} | ID : {p.id} | Investi : ${fmt(inv)} | Achat : ${fmt(p.buyPrice)}
+                </div>
+                <div style={{ marginTop: "0.25rem", fontSize: "0.9rem", color: "#aaa" }}>
+                  📊 Variation : {changeLine}
+                </div>
+                <div style={{ marginTop: "0.5rem" }}>
+                  <button
+                    onClick={() => handleSell(p.symbol, curr)}
+                    style={{ padding: "6px 12px", backgroundColor: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                  >
+                    VENDRE
+                  </button>
+                </div>
+              </div>
+            );
+          })
         )}
       </section>
 
@@ -199,27 +181,33 @@ const Profile = () => {
         {history.length === 0 ? (
           <p>Aucun trade enregistré.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxHeight: "500px", overflowY: "auto" }}>
-            {history.map((t) => (
+          history.map((t) => {
+            const profitPct = t.type === "sell"
+              ? ((t.profit / (t.buyPrice * t.quantity)) * 100)
+              : null;
+            return (
               <div key={t.id} style={{
                 borderLeft: `6px solid ${t.type === "sell" ? (t.profit >= 0 ? "#0f0" : "#f00") : "#888"}`,
                 backgroundColor: "#1e1e1e",
                 borderRadius: "8px",
                 padding: "1rem",
+                marginBottom: "1rem"
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
                   <div style={{ fontWeight: "bold" }}>{t.symbol}</div>
                   <div style={{ color: "#ccc" }}>{t.type.toUpperCase()}</div>
                   <div style={{ color: t.type === "sell" ? (t.profit >= 0 ? "lightgreen" : "salmon") : "#ccc" }}>
-                    {t.type === "sell" ? `$${fmt(t.profit)} (${fmt((t.profit/(t.buyPrice*t.quantity))*100)}%)` : "—"}
+                    {t.type === "sell"
+                      ? `$${fmt(t.profit)} (${fmt(profitPct)}%)`
+                      : "—"}
                   </div>
                 </div>
                 <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#ccc" }}>
-                  🕒 {new Date(t.date).toLocaleString()} | ID : {t.id}
+                  🕒 {new Date(t.date).toLocaleString()} | ID : {t.id} | Investi : ${fmt(t.quantity * t.buyPrice)} | Achat : ${fmt(t.buyPrice)} | Vente : {t.type === "sell" ? `$${fmt(t.sellPrice)}` : "—"}
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })
         )}
       </section>
 
