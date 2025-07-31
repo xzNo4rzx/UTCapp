@@ -1,7 +1,7 @@
 // src/utils/fetchPrices.js
 import axios from "axios";
 
-const CACHE_DURATION = 60_000;  // 1 minute
+const CACHE_DURATION = 60_000;  // 1 minute de cache
 let _lastFetch = 0;
 let _cache = null;
 
@@ -25,12 +25,11 @@ function getChangePercent(now, past) {
 
 export default async function fetchPrices() {
   const now = Date.now();
-  // Retour cache si encore valide
   if (_cache && now - _lastFetch < CACHE_DURATION) {
     return _cache;
   }
 
-  // Appel CoinGecko avec price_change_percentage pour 24h et 7d
+  // Appel CoinGecko pour récupérer les variations 24h et 7j
   const resp = await axios.get(
     "https://api.coingecko.com/api/v3/coins/markets",
     {
@@ -45,37 +44,43 @@ export default async function fetchPrices() {
     }
   );
 
-  const data = resp.data; // tableau d’objets CoinGecko
+  const data = resp.data;
   const history = getHistory();
 
   const entries = data.map((c) => {
     const symbol = c.symbol.toUpperCase();
     const currentPrice = c.current_price;
-    const ts = Date.now();
+    const ts = now;
 
-    // ─── Enregistrer l’historique pour le 5m
+    // ─── Enregistrer l’historique pour calculer le 5 min
     if (!history[symbol]) history[symbol] = [];
     history[symbol].push({ timestamp: ts, price: currentPrice });
 
-    // ne garder que 7 jours max
+    // purger les données de plus de 7 jours
     history[symbol] = history[symbol].filter(
       (e) => ts - e.timestamp <= 7 * 24 * 60 * 60 * 1000
     );
 
-    // fonction pour retrouver le prix il y a X minutes
+    // fonction pour retrouver le prix le plus proche de targetTime (<=)
     const findOldPrice = (minutesAgo) => {
       const target = ts - minutesAgo * 60 * 1000;
-      const past = history[symbol].find((e) => e.timestamp <= target);
-      return past ? past.price : null;
+      // tous les enregistrements antérieurs à target
+      const pastEntries = history[symbol].filter((e) => e.timestamp <= target);
+      if (pastEntries.length === 0) return null;
+      // choisir celui avec le timestamp le plus proche de target
+      const closest = pastEntries.reduce((prev, curr) =>
+        Math.abs(curr.timestamp - target) < Math.abs(prev.timestamp - target)
+          ? curr
+          : prev
+      );
+      return closest.price;
     };
 
     const price5min = findOldPrice(5);
     const change5min = getChangePercent(currentPrice, price5min);
 
-    // ─── Variations récupérées DIRECTEMENT via CoinGecko
-    // 24h
+    // ─── Variations récupérées directement
     const change1d = c.price_change_percentage_24h_in_currency ?? 0;
-    // 7 jours
     const change7d = c.price_change_percentage_7d_in_currency ?? 0;
 
     return {
@@ -87,10 +92,9 @@ export default async function fetchPrices() {
     };
   });
 
-  // sauvegarde l’historique mis à jour
   saveHistory(history);
 
-  // tri sur la variation 5min pour top movers
+  // tri et découpage pour top movers sur 5 min
   const sorted5min = [...entries].sort((a, b) => b.change5min - a.change5min);
   const top5Up = sorted5min.slice(0, 5);
   const top5Down = sorted5min.slice(-5).reverse();
@@ -101,7 +105,6 @@ export default async function fetchPrices() {
   );
 
   const result = { top5Up, top5Down, rest };
-
   _cache = result;
   _lastFetch = now;
   return result;
