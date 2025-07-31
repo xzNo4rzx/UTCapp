@@ -1,6 +1,24 @@
-import React, { useContext, useEffect, useState } from "react";
+// src/pages/Profile.jsx
+import React, { useContext, useState, useEffect } from "react";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
+import fetchPrices from "../utils/fetchPrices";
+
+// Formatte un nombre en $X.XX ou X.XXXX selon la taille
+const formatPrice = (n) => {
+  if (n >= 1) return n.toFixed(2);
+  if (n >= 0.01) return n.toFixed(4);
+  return n.toFixed(6);
+};
+
+// Formatte un nombre en “+X.XX%” ou “-X.XX%”, couleur selon signe
+const formatPercent = (v) => {
+  if (v == null) return "—";
+  const fixed = v.toFixed(2);
+  const sign = v >= 0 ? "+" : "";
+  const color = v >= 0 ? "lightgreen" : "salmon";
+  return <span style={{ color }}>{sign}{fixed}%</span>;
+};
 
 const Profile = () => {
   const {
@@ -15,165 +33,126 @@ const Profile = () => {
     positiveTrades,
     totalProfit,
     totalProfitPercent,
-    updatePrices,
-    resetPortfolio,
     sellPosition,
+    resetPortfolio,
   } = useContext(PortfolioContext);
 
   const [sellModal, setSellModal] = useState(false);
   const [sellSymbol, setSellSymbol] = useState("");
   const [sellPrice, setSellPrice] = useState(0);
   const [sellPercent, setSellPercent] = useState(100);
-  const [startDate, setStartDate] = useState(() => {
-    const stored = localStorage.getItem("ptStartDate");
-    return stored ? new Date(stored) : new Date();
-  });
+  const [priceData, setPriceData] = useState({}); // { BTC: {change5min,change1d,change7d}, ... }
 
+  // Charger les variations pour nos positions
   useEffect(() => {
-    localStorage.setItem("ptStartDate", startDate.toISOString());
-  }, [startDate]);
+    const loadVariations = async () => {
+      const { top5Up, top5Down, rest } = await fetchPrices();
+      const all = [...top5Up, ...top5Down, ...rest];
+      const map = {};
+      all.forEach((c) => {
+        map[c.symbol] = c;
+      });
+      setPriceData(map);
+    };
+    loadVariations();
+    const iv = setInterval(loadVariations, 5 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
 
+  // Helpers pour la modale
   const handleSell = (symbol, price) => {
     setSellSymbol(symbol);
     setSellPrice(price);
     setSellPercent(100);
     setSellModal(true);
   };
-
   const confirmSell = () => {
     const pos = positions.find((p) => p.symbol === sellSymbol);
     if (!pos) return;
-    const quantityToSell = (sellPercent / 100) * pos.quantity;
-    sellPosition(pos.id, quantityToSell, sellPrice);
+    const qty = (sellPercent / 100) * pos.quantity;
+    sellPosition(pos.id, qty, sellPrice);
     setSellModal(false);
   };
-
   const handleChangePercent = (e) => setSellPercent(Number(e.target.value));
   const handleSetMax = () => setSellPercent(100);
   const handleCloseSell = () => setSellModal(false);
+
   const fmt = (n) => Number(n).toFixed(2);
 
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", color: "#fff", fontFamily: "sans-serif", minHeight: "100vh" }}>
       <h1>👤 Mon Portefeuille</h1>
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-        <h2 style={{ color: "#aaa" }}>{portfolioName} | 🕒 Début du PT : {startDate.toLocaleString()}</h2>
-        <button
-          onClick={() => {
-            if (window.confirm("Confirmer la remise à zéro ? Cela clôturera le portefeuille actuel.")) {
-              localStorage.removeItem("ptStartDate");
-              resetPortfolio();
-            }
-          }}
-          style={{
-            padding: "6px 12px",
-            backgroundColor: "#dc3545",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          🧨 RESET PT TO 10000$
-        </button>
-      </div>
+      <h2 style={{ color: "#aaa" }}>{portfolioName}</h2>
 
-      {/* Bilan */}
-      <section style={{ backgroundColor: "#1e1e1e", padding: "1rem", borderRadius: "8px", marginTop: "1rem" }}>
-        <h3 style={{ marginTop: 0 }}>📊 Bilan</h3>
+      {/* Bilan résumé */}
+      <section style={{ marginTop: "1rem", backgroundColor: "#1e1e1e", padding: "1rem", borderRadius: "8px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-          <div>💹 Bilan global</div>
           <div>💼 Solde total : ${fmt(cash + investedAmount)}</div>
-          <div>💰 Cash disponible : ${fmt(cash)}</div>
+          <div>💰 Cash dispo : ${fmt(cash)}</div>
           <div>📈 Investi : ${fmt(investedAmount)}</div>
           <div>📊 Positions ouvertes : {activePositionsCount}</div>
-          <div>🔁 Nombre de trades : {totalTrades}</div>
-          <div>✅ Trades positifs : {positiveTrades} / {totalTrades}</div>
-          <div style={{
-            marginLeft: "auto",
-            fontWeight: "bold",
-            fontSize: "1.1rem",
-            padding: "0.5rem 1rem",
-            backgroundColor: "#222",
-            borderRadius: "6px",
-            color: totalProfit >= 0 ? "lightgreen" : "salmon",
-          }}>
-            📈 Rendement total : ${fmt(totalProfit)} ({fmt(totalProfitPercent)}%)
+          <div>🔁 Trades : {totalTrades}</div>
+          <div>✅ Positifs : {positiveTrades}/{totalTrades}</div>
+          <div style={{ marginLeft: "auto", fontWeight: "bold", color: totalProfit>=0?"lightgreen":"salmon" }}>
+            Rendement : ${fmt(totalProfit)} ({fmt(totalProfitPercent)}%)
           </div>
           <button
-            onClick={updatePrices}
-            style={{
-              marginLeft: "auto",
-              padding: "8px 16px",
-              backgroundColor: "#007bff",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-              animation: "shake 0.4s",
-            }}
+            onClick={resetPortfolio}
+            style={{ marginLeft: "auto", background: "#dc3545", padding: "6px 12px", border: "none", borderRadius: "4px", cursor: "pointer" }}
           >
-            🔄 UPDATE PRICES NOW
+            🧨 RESET PORTFOLIO
           </button>
         </div>
       </section>
 
-      {/* Positions en cours */}
+      {/* Positions ouvertes avec variations */}
       <section style={{ marginTop: "2rem" }}>
         <h3>📌 Positions en cours</h3>
         {positions.length === 0 ? (
           <p>Aucune position ouverte.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {positions.map((p) => {
-              const curr = currentPrices[p.symbol] ?? 0;
-              const investment = p.quantity * p.buyPrice;
-              const valueNow = p.quantity * curr;
-              const pnl = valueNow - investment;
-              const pnlPercent = ((valueNow / investment - 1) * 100);
-
-              const v = currentPrices?.__variations?.[p.symbol] || {};
-              const changeLine = `${v["5m"]?.toFixed(2)}% (5m) | ${v["1d"]?.toFixed(2)}% (1j) | ${v["7d"]?.toFixed(2)}% (7j)`;
-
-              return (
-                <div key={p.id} style={{
-                  borderLeft: `6px solid ${pnl >= 0 ? "#0f0" : "#f00"}`,
-                  backgroundColor: "#1e1e1e",
-                  borderRadius: "8px",
-                  padding: "1rem",
-                  width: "100%",
-                  boxSizing: "border-box"
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
-                    <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{p.symbol}</div>
-                    <div style={{ color: curr >= p.buyPrice ? "lightgreen" : "salmon" }}>${fmt(curr)}</div>
-                    <div style={{ color: pnl >= 0 ? "lightgreen" : "salmon" }}>{fmt(pnl)}$ / {fmt(pnlPercent)}%</div>
-                  </div>
-                  <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#ccc" }}>
-                    🕒 {new Date(p.date).toLocaleString()} | ID : {p.id} | Investi : ${fmt(investment)} | Achat : ${fmt(p.buyPrice)} | Actuel : ${fmt(curr)}
-                  </div>
-                  <div style={{ marginTop: "0.25rem", fontSize: "0.9rem", color: "#aaa" }}>
-                    📊 Variation : {changeLine}
-                  </div>
-                  <div style={{ marginTop: "0.5rem" }}>
-                    <button
-                      onClick={() => handleSell(p.symbol, curr)}
-                      style={{
-                        padding: "6px 12px",
-                        backgroundColor: "#dc3545",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "4px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      VENDRE
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem" }}>
+            <thead>
+              <tr style={{ background: "#333", color: "#fff" }}>
+                <th style={{ padding: "8px" }}>Symbol</th>
+                <th style={{ padding: "8px" }}>Actuel</th>
+                <th style={{ padding: "8px" }}>5 min</th>
+                <th style={{ padding: "8px" }}>1 j</th>
+                <th style={{ padding: "8px" }}>7 j</th>
+                <th style={{ padding: "8px" }}>P&L</th>
+                <th style={{ padding: "8px" }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((p, i) => {
+                const curr = currentPrices[p.symbol] ?? 0;
+                const invested = p.quantity * p.buyPrice;
+                const pnl = p.quantity * curr - invested;
+                const pnlPct = pnl / invested * 100;
+                const vari = priceData[p.symbol] || {};
+                return (
+                  <tr key={p.id} style={{ background: i%2===0?"#1e1e1e":"#252525" }}>
+                    <td style={{ padding: "8px", color: "#fff" }}>{p.symbol}</td>
+                    <td style={{ padding: "8px", color: curr>=p.buyPrice?"lightgreen":"salmon" }}>${formatPrice(curr)}</td>
+                    <td style={{ padding: "8px" }}>{formatPercent(vari.change5min)}</td>
+                    <td style={{ padding: "8px" }}>{formatPercent(vari.change1d)}</td>
+                    <td style={{ padding: "8px" }}>{formatPercent(vari.change7d)}</td>
+                    <td style={{ padding: "8px", color: pnl>=0?"lightgreen":"salmon" }}>
+                      {fmt(pnl)}$ / {fmt(pnlPct)}%
+                    </td>
+                    <td style={{ padding: "8px" }}>
+                      <button
+                        onClick={() => handleSell(p.symbol, curr)}
+                        style={{ background: "#dc3545", color: "#fff", padding: "4px 8px", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                      >
+                        Vendre
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </section>
 
@@ -183,38 +162,23 @@ const Profile = () => {
         {history.length === 0 ? (
           <p>Aucun trade enregistré.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxHeight: "500px", overflowY: "auto" }}>
+          <ul style={{ listStyle: "none", padding: 0 }}>
             {history.map((t) => (
-              <div key={t.id} style={{
-                borderLeft: `6px solid ${t.type === "sell" ? (t.profit >= 0 ? "#0f0" : "#f00") : "#888"}`,
-                backgroundColor: "#1e1e1e",
-                borderRadius: "8px",
-                padding: "1rem",
-                width: "100%",
-                boxSizing: "border-box"
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
-                  <div style={{ fontWeight: "bold" }}>{t.symbol}</div>
-                  <div style={{ color: "#ccc" }}>{t.type.toUpperCase()}</div>
-                  <div style={{ color: t.type === "sell" ? (t.profit >= 0 ? "lightgreen" : "salmon") : "#ccc" }}>
-                    {t.type === "sell" ? `$${fmt(t.profit)} (${fmt((t.profit / (t.buyPrice * t.quantity)) * 100)}%)` : "—"}
-                  </div>
-                </div>
-                <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#ccc" }}>
-                  🕒 {new Date(t.date).toLocaleString()} | ID : {t.id} | Investi : ${fmt(t.quantity * t.buyPrice)} | Achat : ${fmt(t.buyPrice)} | Vente : {t.type === "sell" ? `$${fmt(t.sellPrice)}` : "—"}
-                </div>
-              </div>
+              <li key={t.id} style={{ marginBottom: "1rem", background: "#1e1e1e", padding: "1rem", borderRadius: "6px" }}>
+                <strong>{t.symbol}</strong> – {t.type.toUpperCase()} – {new Date(t.date).toLocaleString()}<br/>
+                {t.type==="sell" && <>Profit: <span style={{ color: t.profit>=0?"lightgreen":"salmon" }}>${fmt(t.profit)} ({fmt((t.profit/(t.buyPrice*t.quantity))*100)}%)</span></>}
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
+      {/* Modale de vente */}
       <SellModal
         show={sellModal}
         symbol={sellSymbol}
         price={sellPrice}
         percent={sellPercent}
-        positions={positions}
         onChangePercent={handleChangePercent}
         onSetMax={handleSetMax}
         onClose={handleCloseSell}
