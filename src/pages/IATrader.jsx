@@ -1,5 +1,6 @@
 import React, { useContext, useState, useEffect } from "react";
 import { IATraderContext } from "../context/IATraderContext";
+import LogViewer from "./LogViewer";
 
 const IATrader = () => {
   // Récupère tous les états et méthodes du contexte IA Trader
@@ -38,6 +39,7 @@ const IATrader = () => {
   return (
     <div style={{ padding: "2rem", backgroundColor: "#121212", color: "#fff", fontFamily: "sans-serif", minHeight: "100vh" }}>
       <h1>🤖 IA Trader</h1>
+      <LogViewer />
 
       {/* En-tête avec nom, date, boutons de MAJ et reset */}
       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
