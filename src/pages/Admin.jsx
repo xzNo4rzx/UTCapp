@@ -40,7 +40,7 @@ const Admin = () => {
     }
     setSending(true);
     try {
-      await fetch("https://utc-api.onrender.com/send-manual-signal", {
+      const res = await fetch("https://utc-api.onrender.com/send-manual-signal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -53,6 +53,9 @@ const Admin = () => {
           explanation: [`ADMIN POST: ${adminMessage.trim()}`],
         }),
       });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       alert("✅ Message envoyé !");
       setAdminMessage("");
     } catch (err) {
