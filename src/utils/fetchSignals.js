@@ -1,6 +1,4 @@
-// src/utils/fetchSignals.js
-
-const API_BASE = "https://utc-ai-signal-api.onrender.com";
+const API_BASE = "https://utc-api.onrender.com";
 
 const fetchSignals = async () => {
   try {
