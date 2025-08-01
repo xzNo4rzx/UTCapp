@@ -1,34 +1,23 @@
 import React, { useEffect, useState } from "react";
 
-const fetchLogs = async () => {
-  try {
-    const res = await fetch("https://utc-ai-signal-api.onrender.com/utcapp/trader-log");
-    const data = await res.json();
-    setLogs(data.log || []);
-  } catch (err) {
-    console.error("❌ Erreur chargement logs :", err);
-    setLogs(["❌ Erreur chargement logs : " + (err.message || err)]);
-  }
-};
-
 const LogViewer = () => {
   const [logs, setLogs] = useState([]);
 
-  useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const res = await fetch("https://utc-ai-signal-api.onrender.com/trader-log");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        const lines = text.split("\n").filter(Boolean).reverse(); // Derniers logs d'abord
-        setLogs(lines);
-      } catch (err) {
-        setLogs([`❌ Erreur chargement logs : ${err.message}`]);
-      }
-    };
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch("https://utc-ai-signal-api.onrender.com/utcapp/trader-log");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setLogs(data.log || []);
+    } catch (err) {
+      console.error("❌ Erreur chargement logs :", err);
+      setLogs([`❌ Erreur chargement logs : ${err.message}`]);
+    }
+  };
 
+  useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 15000);
+    const interval = setInterval(fetchLogs, 15000); // ⏱️ Refresh toutes les 15s
     return () => clearInterval(interval);
   }, []);
 
@@ -41,12 +30,17 @@ const LogViewer = () => {
       maxHeight: "300px",
       overflowY: "auto",
       border: "1px solid #333",
-      borderRadius: "8px"
+      borderRadius: "8px",
+      marginBottom: "2rem"
     }}>
       <h3 style={{ color: "#4ea8de" }}>📋 Journal IA Trader (auto-refresh)</h3>
-      {logs.map((line, i) => (
-        <div key={i} style={{ whiteSpace: "pre-wrap" }}>{line}</div>
-      ))}
+      {logs.length === 0 ? (
+        <p style={{ color: "#888" }}>Aucune entrée disponible...</p>
+      ) : (
+        logs.map((line, i) => (
+          <div key={i} style={{ whiteSpace: "pre-wrap" }}>{line}</div>
+        ))
+      )}
     </div>
   );
 };
