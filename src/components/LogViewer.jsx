@@ -1,8 +1,7 @@
-// src/components/LogViewer.jsx
-
 import React, { useEffect, useState } from "react";
 
-const LOG_ENDPOINT = "https://ai-signal-api.onrender.com/utcapp/trader-log";
+// ✅ Nouvelle URL publique fonctionnelle
+const LOG_ENDPOINT = "https://utc-api.onrender.com/utcapp/trader-log";
 
 const LogViewer = () => {
   const [logs, setLogs] = useState([]);
@@ -25,7 +24,7 @@ const LogViewer = () => {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 15000); // auto-refresh
+    const interval = setInterval(fetchLogs, 15000); // 🔁 auto-refresh 15s
     return () => clearInterval(interval);
   }, []);
 
