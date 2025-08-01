@@ -17,7 +17,7 @@ const LogViewer = () => {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 15000); // ⏱️ Refresh toutes les 15s
+    const interval = setInterval(fetchLogs, 15000); // auto-refresh 15s
     return () => clearInterval(interval);
   }, []);
 
@@ -28,7 +28,7 @@ const LogViewer = () => {
       color: "#0f0",
       fontFamily: "monospace",
       maxHeight: "300px",
-      overflowY: "auto",
+      overflowY: "scroll",
       border: "1px solid #333",
       borderRadius: "8px",
       marginBottom: "2rem"
