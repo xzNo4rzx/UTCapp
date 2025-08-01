@@ -40,7 +40,7 @@ const Admin = () => {
     }
     setSending(true);
     try {
-      await fetch("https://ai-signal-api.onrender.com/send-manual-signal", {
+      await fetch("https://utc-api.onrender.com/send-manual-signal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
