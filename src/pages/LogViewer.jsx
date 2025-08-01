@@ -1,5 +1,16 @@
 import React, { useEffect, useState } from "react";
 
+const fetchLogs = async () => {
+  try {
+    const res = await fetch("https://utc-ai-signal-api.onrender.com/utcapp/trader-log");
+    const data = await res.json();
+    setLogs(data.log || []);
+  } catch (err) {
+    console.error("❌ Erreur chargement logs :", err);
+    setLogs(["❌ Erreur chargement logs : " + (err.message || err)]);
+  }
+};
+
 const LogViewer = () => {
   const [logs, setLogs] = useState([]);
 
