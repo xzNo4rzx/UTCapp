@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from "react";
 import { IATraderContext } from "../context/IATraderContext";
-import LogViewer from "./LogViewer";
+import LogViewer from "../components/LogViewer";
 
 const IATrader = () => {
   // Récupère tous les états et méthodes du contexte IA Trader
