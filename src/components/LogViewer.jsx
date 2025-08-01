@@ -1,6 +1,7 @@
+// src/components/LogViewer.jsx
+
 import React, { useEffect, useState } from "react";
 
-// ✅ CORRECT BACKEND DOMAIN
 const LOG_ENDPOINT = "https://ai-signal-api.onrender.com/utcapp/trader-log";
 
 const LogViewer = () => {
@@ -24,7 +25,7 @@ const LogViewer = () => {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 15000); // 🔁 Auto-refresh 15s
+    const interval = setInterval(fetchLogs, 15000); // auto-refresh
     return () => clearInterval(interval);
   }, []);
 
@@ -41,7 +42,6 @@ const LogViewer = () => {
       marginBottom: "2rem"
     }}>
       <h3 style={{ color: "#4ea8de" }}>📋 Journal IA Trader (auto-refresh)</h3>
-
       {error ? (
         <div style={{ color: "salmon" }}>{error}</div>
       ) : logs.length === 0 ? (
