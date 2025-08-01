@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-// ✅ Nouvelle URL publique fonctionnelle
-const LOG_ENDPOINT = "https://utc-api.onrender.com/utcapp/trader-log";
+const LOG_ENDPOINT = "https://utc-api.onrender.com/trader-log";
 
 const LogViewer = () => {
   const [logs, setLogs] = useState([]);
@@ -24,7 +23,7 @@ const LogViewer = () => {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 15000); // 🔁 auto-refresh 15s
+    const interval = setInterval(fetchLogs, 15000); // auto-refresh
     return () => clearInterval(interval);
   }, []);
 
