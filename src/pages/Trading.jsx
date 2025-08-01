@@ -5,16 +5,9 @@ import SellModal from "../components/SellModal";
 
 const Trading = () => {
   const {
-    portfolioName,
-    cash,
-    positions,
-    currentPrices,
-    buyPosition,
-    sellPosition,
-    updatePrices,
-    investedAmount,
-    totalProfit,
-    totalProfitPercent,
+    portfolioName, cash, positions, currentPrices,
+    buyPosition, sellPosition, updatePrices,
+    investedAmount, totalProfit, totalProfitPercent,
   } = useContext(PortfolioContext);
 
   const [cryptos, setCryptos] = useState([]);
@@ -26,6 +19,8 @@ const Trading = () => {
   const [top5Up, setTop5Up] = useState([]);
   const [top5Down, setTop5Down] = useState([]);
   const [updatedPrices, setUpdatedPrices] = useState({});
+
+  const startDate = localStorage.getItem("ptStartDate");
 
   const openSell = (symbol, price) => {
     setSellSymbol(symbol);
@@ -145,7 +140,6 @@ const Trading = () => {
   const handleChangePercent = (e) => setSellPercent(Number(e.target.value));
   const handleSetMax = () => setSellPercent(100);
   const handleCloseSell = () => setSellModal(false);
-  const startDate = localStorage.getItem("ptStartDate");
 
   const renderCryptoBlock = (c) => {
     const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
@@ -181,48 +175,64 @@ const Trading = () => {
   };
 
   return (
-    <div style={{ padding: "2rem", backgroundColor: "#121212", minHeight: "100vh", color: "#fff", fontFamily: "sans-serif" }}>
-      <h1>💸 TradingVirtuel</h1>
-      <h2 style={{ marginTop: "-1rem", color: "#aaa" }}>
-        {portfolioName} | 🕒 Début : {startDate ? new Date(startDate).toLocaleString() : "—"}
-      </h2>
+    <div style={{
+      backgroundImage: 'url("/backgrounds/homebackground.png")',
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundAttachment: "fixed",
+      padding: "2rem",
+      minHeight: "100vh",
+      color: "#fff",
+      fontFamily: "sans-serif"
+    }}>
+      {/* 🔒 EN-TÊTE STICKY */}
+      <div style={{
+        position: "sticky",
+        top: "0",
+        zIndex: 100,
+        backgroundColor: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(8px)",
+        padding: "1rem",
+        marginBottom: "2rem",
+        borderRadius: "6px"
+      }}>
+        <h1>💸 TradingVirtuel</h1>
+        <h2 style={{ marginTop: "-1rem", color: "#aaa" }}>
+          {portfolioName} | 🕒 Début : {startDate ? new Date(startDate).toLocaleString() : "—"}
+        </h2>
 
-      <div style={{ marginTop: "1rem" }}>
-        <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
-        <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
-        <div>📈 Investi : ${investedAmount.toFixed(2)}</div>
-        <div style={{ color: totalProfit >= 0 ? "lightgreen" : "salmon" }}>
-          📊 Rendement total : ${totalProfit.toFixed(2)} ({totalProfitPercent.toFixed(2)}%)
-        </div>
         <div style={{ marginTop: "1rem" }}>
-          📌 Positions placées : {positionSummary.count} | Valeur actuelle : ${positionSummary.value.toFixed(2)}
+          <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
+          <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
+          <div>📈 Investi : ${investedAmount.toFixed(2)}</div>
+          <div style={{ color: totalProfit >= 0 ? "lightgreen" : "salmon" }}>
+            📊 Rendement total : ${totalProfit.toFixed(2)} ({totalProfitPercent.toFixed(2)}%)
+          </div>
+          <div style={{ marginTop: "1rem" }}>
+            📌 Positions placées : {positionSummary.count} | Valeur actuelle : ${positionSummary.value.toFixed(2)}
+          </div>
         </div>
-      </div>
 
-      <div style={{ margin: "2rem 0" }}>
-        <button
-          id="update-btn"
-          onClick={handleUpdatePrices}
-          style={{
+        <div style={{ marginTop: "1rem" }}>
+          <button id="update-btn" onClick={handleUpdatePrices} style={{
             marginRight: "1rem",
-            padding: "12px 24px",
+            padding: "10px 20px",
             backgroundColor: "#007bff",
             color: "#fff",
             border: "none",
             borderRadius: "4px",
             cursor: "pointer",
             fontSize: "1rem"
-          }}
-        >
-          🔄 UPDATE PRICES NOW
-        </button>
-      </div>
-
-      {lastUpdate && (
-        <div style={{ marginBottom: "1rem", fontSize: "0.9rem", color: "#888" }}>
-          Dernière mise à jour : {lastUpdate}
+          }}>
+            🔄 UPDATE PRICES NOW
+          </button>
+          {lastUpdate && (
+            <span style={{ fontSize: "0.9rem", color: "#ccc" }}>
+              Dernière mise à jour : {lastUpdate}
+            </span>
+          )}
         </div>
-      )}
+      </div>
 
       <div style={{ marginBottom: "1.5rem" }}>
         <h3>📈 Top 5 hausses</h3>

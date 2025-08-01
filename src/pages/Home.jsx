@@ -5,189 +5,177 @@ import { IATraderContext } from "../context/IATraderContext";
 
 const Home = () => {
   const {
-    portfolioName,
-    cash,
-    positions,
-    history,
-    currentPrices,
-    totalProfit,
-    totalProfitPercent,
+    portfolioName, cash, positions, history, currentPrices,
   } = useContext(PortfolioContext);
 
   const {
-    iaName,
-    iaStart,
-    iaCash,
-    iaPositions,
-    iaHistory,
-    iaCurrentPrices,
-    iaTotalProfit,
-    iaTotalProfitPercent,
+    iaName, iaStart, iaCash, iaPositions, iaHistory, iaCurrentPrices,
   } = useContext(IATraderContext);
 
   const [ptStartDate, setPtStartDate] = useState("");
 
   useEffect(() => {
     const storedStart = localStorage.getItem("ptStartDate");
-    if (storedStart) {
-      setPtStartDate(storedStart);
-    }
+    if (storedStart) setPtStartDate(storedStart);
   }, []);
 
   const fmt = (v, d = 2) => (v ? Number(v).toFixed(d) : "0.00");
 
   const formatDate = (str) =>
     new Date(str || new Date()).toLocaleString("fr-FR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
     });
 
   const countWins = (arr = []) => arr.filter((t) => t.profit > 0).length;
 
   const renderBox = ({
-    title,
-    name,
-    start,
-    cash,
-    positions = [],
-    history = [],
-    totalProfit,
-    totalProfitPercent,
-    to,
+    title, name, start, cash,
+    positions = [], history = [],
+    currentPrices, to
   }) => {
     const winCount = countWins(history);
     const totalTrades = history.length;
-    const openPositions = positions.length;
     const invested = positions.reduce((s, p) => s + p.quantity * p.buyPrice, 0);
     const valueNow = positions.reduce((s, p) => {
-      const curr = (p?.symbol && (currentPrices?.[p.symbol] || iaCurrentPrices?.[p.symbol])) ?? p.buyPrice;
+      const curr = (p?.symbol && currentPrices?.[p.symbol]) ?? p.buyPrice;
       return s + p.quantity * curr;
     }, 0);
     const rendement = cash + valueNow - 10000;
     const rendementPercent = ((cash + valueNow - 10000) / 10000) * 100;
 
     return (
-      <section
-        style={{
-          marginBottom: "2rem",
-          padding: "1.5rem",
-          backgroundColor: "#1e1e1e",
-          borderRadius: "8px",
-          fontFamily: "sans-serif",
-          color: "#fff",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-          <div>
-            <h2>{title}</h2>
-            <p style={{ color: "#aaa", fontSize: "0.9rem" }}>
-              Nom : <strong>{name}</strong><br />
-              Démarré le : {start ? formatDate(start) : "—"}<br />
-              Cash disponible : ${fmt(cash)}<br />
-              Positions en cours : {openPositions}<br />
-              Valeur actuelle des positions : ${fmt(valueNow)}<br />
-              Total investi : ${fmt(invested)}<br />
-              Trades gagnants : {winCount} / {totalTrades}
-            </p>
-          </div>
-          <div
-            style={{
-              padding: "1rem",
-              backgroundColor: rendement >= 0 ? "#153d27" : "#3d1d1d",
-              color: rendement >= 0 ? "lightgreen" : "salmon",
-              borderRadius: "8px",
-              minWidth: "180px",
-              textAlign: "center",
-              fontWeight: "bold",
-              fontSize: "1.1rem",
-            }}
-          >
-            Rendement total<br />
-            ${fmt(rendement)} ({fmt(rendementPercent)}%)
-          </div>
+      <section className="slide-up-box" style={boxStyle}>
+        <h2>{title}</h2>
+        <p style={{ color: "#aaa", fontSize: "0.9rem" }}>
+          Nom : <strong>{name}</strong><br />
+          Démarré le : {start ? formatDate(start) : "—"}<br />
+          Cash disponible : ${fmt(cash)}<br />
+          Positions en cours : {positions.length}<br />
+          Valeur actuelle : ${fmt(valueNow)}<br />
+          Total investi : ${fmt(invested)}<br />
+          Trades gagnants : {winCount} / {totalTrades}
+        </p>
+
+        {/* ✅ RENDU PLUS PETIT ICI */}
+        <div style={{
+          marginTop: "1rem",
+          padding: "0.5rem",
+          backgroundColor: rendement >= 0 ? "#153d27" : "#3d1d1d",
+          color: rendement >= 0 ? "lightgreen" : "salmon",
+          borderRadius: "6px",
+          textAlign: "center",
+          fontSize: "0.9rem",
+          maxWidth: "90px", // ← ici la largeur réduite
+        }}>
+          <div style={{ fontWeight: "bold" }}>Rendement total</div>
+          <div>${fmt(rendement)}<br />({fmt(rendementPercent)}%)</div>
         </div>
-        <Link
-          to={to}
-          style={{
-            display: "inline-block",
-            marginTop: "1rem",
-            padding: "6px 12px",
-            backgroundColor: "#4ea8de",
-            color: "#fff",
-            textDecoration: "none",
-            borderRadius: "4px",
-            fontWeight: "bold",
-          }}
-        >
-          → Accéder
-        </Link>
+
+        <Link to={to} style={btnStyle}>→ Accéder</Link>
       </section>
     );
   };
 
   return (
-    <div style={{ padding: "2rem", backgroundColor: "#121212", minHeight: "100vh", color: "#eee" }}>
-      <h1 style={{ marginBottom: "2rem" }}>🏆 Ultimate Trading Champions (UTC)</h1>
-
-      {/* Bloc Portefeuille virtuel */}
-      {renderBox({
-        title: "💼 Portefeuille virtuel",
-        name: portfolioName,
-        start: ptStartDate,
-        cash,
-        positions,
-        history,
-        currentPrices,
-        totalProfit,
-        totalProfitPercent,
-        to: "/trading",
-      })}
-
-      {/* Bloc IA Trader */}
-      {renderBox({
-        title: "🤖 IA Trader",
-        name: iaName,
-        start: iaStart,
-        cash: iaCash,
-        positions: iaPositions,
-        history: iaHistory,
-        currentPrices: iaCurrentPrices,
-        totalProfit: iaTotalProfit,
-        totalProfitPercent: iaTotalProfitPercent,
-        to: "/ia-trader",
-      })}
-
-      {/* Navigation vers les autres pages */}
-      <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-        <Link to="/analysis" style={boxLinkStyle}>
-          <h3>📊 Analyse</h3>
-          <p>Voir les tendances et graphiques sur 6 mois.</p>
-        </Link>
-        <Link to="/signals" style={boxLinkStyle}>
-          <h3>📡 Signaux</h3>
-          <p>Liste des opportunités détectées par l’IA.</p>
-        </Link>
-        <Link to="/profile" style={boxLinkStyle}>
-          <h3>👤 Profil</h3>
-          <p>Voir votre historique et vos performances.</p>
-        </Link>
+    <div style={pageStyle}>
+      <div style={rowStyle}>
+        {renderBox({
+          title: "💼 Portefeuille virtuel",
+          name: portfolioName,
+          start: ptStartDate,
+          cash,
+          positions,
+          history,
+          currentPrices,
+          to: "/trading",
+        })}
+        {renderBox({
+          title: "🤖 IA Trader",
+          name: iaName,
+          start: iaStart,
+          cash: iaCash,
+          positions: iaPositions,
+          history: iaHistory,
+          currentPrices: iaCurrentPrices,
+          to: "/ia-trader",
+        })}
       </div>
+
+      <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "3rem" }}>
+        <Link to="/analysis" style={linkBox}>📊 Analyse<br />Voir les tendances</Link>
+        <Link to="/signals" style={linkBox}>📡 Signaux<br />Opportunités IA</Link>
+        <Link to="/profile" style={linkBox}>👤 Profil<br />Historique & stats</Link>
+      </div>
+
+      <style>{`
+        .slide-up-box {
+          opacity: 0;
+          transform: translateY(20px);
+          animation: slideUp 0.6s ease-out forwards;
+        }
+        @keyframes slideUp {
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   );
 };
 
-const boxLinkStyle = {
+// 🎨 STYLES
+const pageStyle = {
+  padding: "6rem 2rem 2rem",
+  backgroundImage: 'url("/backgrounds/homebackground.png")',
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+  backgroundAttachment: "fixed",
+  minHeight: "100vh",
+  color: "#eee"
+};
+
+const rowStyle = {
+  display: "flex",
+  justifyContent: "center",
+  gap: "2rem",
+  flexWrap: "wrap"
+};
+
+const boxStyle = {
+  width: "250px", // ← taille fixe des 2 encarts principaux (réduit)
+  padding: "1.5rem",
+  backgroundColor: "rgba(30,30,30,0.6)",
+  borderRadius: "8px",
+  fontFamily: "sans-serif",
+  backdropFilter: "blur(10px)",
+  flexShrink: 0
+};
+
+const linkBox = {
   flex: "1",
   minWidth: "250px",
-  backgroundColor: "#1e1e1e",
+  backgroundColor: "rgba(30,30,30,0.6)",
   color: "#eee",
   textDecoration: "none",
   borderRadius: "6px",
   padding: "1rem",
   border: "1px solid #333",
+  backdropFilter: "blur(6px)",
+  fontWeight: "bold"
+};
+
+const btnStyle = {
+  display: "inline-block",
+  marginTop: "1rem",
+  padding: "4px 8px",
+  backgroundColor: "#4ea8de",
+  color: "#fff",
+  textDecoration: "none",
+  borderRadius: "4px",
+  fontWeight: "bold",
+  fontSize: "0.85rem"
 };
 
 export default Home;
