@@ -2,6 +2,12 @@ import React, { useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
+import { useUserStorage } from "../hooks/useUserStorage";
+const [startDate, setStartDate] = useUserStorage("ptStartDate", new Date());
+
+useEffect(() => {
+  setStartDate(startDate);
+}, [startDate]);
 
 const Profile = () => {
   const {
@@ -25,17 +31,12 @@ const Profile = () => {
   const [sellSymbol, setSellSymbol] = useState("");
   const [sellPrice, setSellPrice] = useState(0);
   const [sellPercent, setSellPercent] = useState(100);
-  const [startDate, setStartDate] = useState(() => {
-    const stored = localStorage.getItem("ptStartDate");
-    return stored ? new Date(stored) : new Date();
-  });
+  
 
   const [variations, setVariations] = useState({});
   const [animatedSymbols, setAnimatedSymbols] = useState([]);
 
-  useEffect(() => {
-    localStorage.setItem("ptStartDate", startDate.toISOString());
-  }, [startDate]);
+  
 
   useEffect(() => {
     const fetchVariations = async () => {

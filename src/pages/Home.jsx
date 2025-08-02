@@ -2,6 +2,8 @@ import React, { useContext, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PortfolioContext } from "../context/PortfolioContext";
 import { IATraderContext } from "../context/IATraderContext";
+import { useUserStorage } from "../hooks/useUserStorage";
+const [ptStartDate] = useUserStorage("ptStartDate", null);
 
 const Home = () => {
   const {
@@ -12,12 +14,7 @@ const Home = () => {
     iaName, iaStart, iaCash, iaPositions, iaHistory, iaCurrentPrices,
   } = useContext(IATraderContext);
 
-  const [ptStartDate, setPtStartDate] = useState("");
-
-  useEffect(() => {
-    const storedStart = localStorage.getItem("ptStartDate");
-    if (storedStart) setPtStartDate(storedStart);
-  }, []);
+  
 
   const fmt = (v, d = 2) => (v ? Number(v).toFixed(d) : "0.00");
 
