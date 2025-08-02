@@ -1,8 +1,7 @@
-// src/hooks/useUserStorage.js
 import { useAuth } from "../context/AuthContext";
 
 export const useUserStorage = (key, fallback = null) => {
-  const { user } = useAuth();
+  const { user } = useAuth(); // ✅ déplacé ici
   const fullKey = `${key}-${user?.uid || "anonymous"}`;
 
   const get = () => {
