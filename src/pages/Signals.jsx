@@ -5,19 +5,7 @@ const Signals = () => {
   const [signals, setSignals] = useState([]);
   const [logs, setLogs] = useState([]);
 
-  useEffect(() => {
-    const loadSignals = async () => {
-      const data = await fetchSignals();
-      const raw = Array.isArray(data?.signals) ? data.signals : data;
-      const sorted = [...raw].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      setSignals(sorted);
-      setLogs(prev => [
-        ...prev,
-        `📥 ${sorted.length} signaux chargés à ${new Date().toLocaleTimeString()}`,
-      ]);
-    };
-    loadSignals();
-  }, []);
+  const fmt = (v) => Number(v || 0).toFixed(2);
 
   const getColor = (type) => {
     if (type === "BUY") return "#0f0";
@@ -33,7 +21,38 @@ const Signals = () => {
     return "#ccc";
   };
 
-  const fmt = (v) => Number(v || 0).toFixed(2);
+  const fetchLogLines = async () => {
+    try {
+      const res = await fetch("https://utc-api.onrender.com/signals-log");
+      const text = await res.text();
+      const lines = text.split("\n").filter(Boolean).slice(-25);
+      setLogs(lines.reverse());
+    } catch (err) {
+      console.error("Erreur chargement log :", err);
+      setLogs(prev => [...prev, "❌ Erreur lecture logs."]);
+    }
+  };
+
+  const loadSignals = async () => {
+    try {
+      const data = await fetchSignals();
+      const raw = Array.isArray(data?.signals) ? data.signals : data;
+      const sorted = [...raw].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setSignals(sorted);
+    } catch (err) {
+      console.error("Erreur chargement signaux :", err);
+    }
+  };
+
+  useEffect(() => {
+    loadSignals();
+    fetchLogLines();
+    const timer = setInterval(() => {
+      fetchLogLines();
+      loadSignals();
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div style={{
@@ -68,13 +87,17 @@ const Signals = () => {
         marginBottom: "2rem",
         fontFamily: "monospace",
         fontSize: "0.9rem",
-        maxHeight: "150px",
+        maxHeight: "180px",
         overflowY: "auto",
         boxShadow: "inset 0 0 4px #000"
       }}>
-        {logs.map((log, i) => (
-          <div key={i} style={{ color: "#4ea8de" }}>{log}</div>
-        ))}
+        {logs.length === 0 ? (
+          <div style={{ color: "#888" }}>Aucun log pour le moment…</div>
+        ) : (
+          logs.map((log, i) => (
+            <div key={i} style={{ color: "#4ea8de" }}>{log}</div>
+          ))
+        )}
       </div>
 
       {/* 🔍 SIGNALS ENCADRÉS */}
