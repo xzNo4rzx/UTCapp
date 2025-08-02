@@ -8,6 +8,7 @@ export const IATraderContext = createContext();
 export const IATraderProvider = ({ children }) => {
   const { user } = useAuth();
 
+  // ⚙️ États internes
   const [iaName] = useState("IA Trader");
   const [iaStart, setIaStart] = useState(() => new Date().toISOString());
   const [iaCash, setIaCash] = useState(10000);
@@ -15,7 +16,7 @@ export const IATraderProvider = ({ children }) => {
   const [iaHistory, setIaHistory] = useState([]);
   const [iaCurrentPrices, setIaCurrentPrices] = useState({});
 
-  // 🔄 Chargement depuis Firestore au login
+  // 🔁 Chargement Firestore lors de la connexion
   useEffect(() => {
     if (!user) return;
     const fetch = async () => {
@@ -30,7 +31,7 @@ export const IATraderProvider = ({ children }) => {
     fetch();
   }, [user]);
 
-  // 💾 Sauvegarde vers Firestore à chaque modif
+  // 💾 Sauvegarde Firestore à chaque modification
   useEffect(() => {
     if (!user) return;
     const save = async () => {
@@ -39,35 +40,56 @@ export const IATraderProvider = ({ children }) => {
         iaCash,
         iaPositions,
         iaHistory,
+        updatedAt: new Date().toISOString(),
       });
     };
     save();
   }, [user, iaStart, iaCash, iaPositions, iaHistory]);
 
+  // 🔄 Récupération des prix (CryptoCompare + fallback Binance)
   const updateIaPrices = async () => {
     const symbols = iaPositions.map((p) => p.symbol);
     if (symbols.length === 0) return;
+
     try {
-      const { data } = await axios.get(
-        "https://min-api.cryptocompare.com/data/pricemulti",
-        {
-          params: {
-            fsyms: symbols.join(","),
-            tsyms: "USD",
-            api_key: import.meta.env.VITE_CRYPTOCOMPARE_API_KEY,
-          },
-        }
-      );
+      const { data } = await axios.get("https://min-api.cryptocompare.com/data/pricemulti", {
+        params: {
+          fsyms: symbols.join(","),
+          tsyms: "USD",
+          api_key: import.meta.env.VITE_CRYPTOCOMPARE_API_KEY,
+        },
+      });
+
       const prices = {};
+
       for (const sym of symbols) {
-        prices[sym] = data[sym]?.USD ?? null;
+        const usd = data?.[sym]?.USD;
+        if (typeof usd === "number" && usd > 0) {
+          prices[sym] = usd;
+        } else {
+          console.warn(`⛔️ CryptoCompare a échoué pour ${sym}, fallback Binance...`);
+          try {
+            const binanceSym = sym.toUpperCase() + "USDT";
+            const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${binanceSym}`);
+            const fallbackPrice = parseFloat(res.data?.price);
+            if (!isNaN(fallbackPrice) && fallbackPrice > 0) {
+              prices[sym] = fallbackPrice;
+            } else {
+              console.warn(`⚠️ Binance a échoué aussi pour ${sym}`);
+            }
+          } catch (err) {
+            console.error(`🔥 Fallback Binance échoué pour ${sym}`, err.message);
+          }
+        }
       }
-      setIaCurrentPrices(prices);
+
+      setIaCurrentPrices((prev) => ({ ...prev, ...prices }));
     } catch (err) {
-      console.error("Erreur updateIaPrices :", err);
+      console.error("Erreur CryptoCompare (IA Trader) :", err);
     }
   };
 
+  // 🧨 Réinitialisation complète
   const resetIATrader = () => {
     const nowIso = new Date().toISOString();
     setIaStart(nowIso);
@@ -77,15 +99,18 @@ export const IATraderProvider = ({ children }) => {
     setIaCurrentPrices({});
   };
 
-  const investedAmount = useMemo(() =>
-    iaPositions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0), [iaPositions]);
+  // 📊 Calculs
+  const investedAmount = useMemo(
+    () => iaPositions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0),
+    [iaPositions]
+  );
 
   const iaTotalProfit = useMemo(() => {
     const closed = iaHistory
       .filter((t) => t.type === "sell")
       .reduce((acc, t) => acc + t.profit, 0);
     const open = iaPositions.reduce((acc, p) => {
-      const curr = iaCurrentPrices[p.symbol] ?? 0;
+      const curr = iaCurrentPrices[p.symbol] ?? p.buyPrice;
       return acc + p.quantity * (curr - p.buyPrice);
     }, 0);
     return closed + open;
