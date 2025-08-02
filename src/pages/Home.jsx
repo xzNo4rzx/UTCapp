@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { PortfolioContext } from "../context/PortfolioContext";
 import { IATraderContext } from "../context/IATraderContext";
 import { useUserStorage } from "../hooks/useUserStorage";
-const [ptStartDate] = useUserStorage("ptStartDate", null);
 
 const Home = () => {
   const {
@@ -14,7 +13,7 @@ const Home = () => {
     iaName, iaStart, iaCash, iaPositions, iaHistory, iaCurrentPrices,
   } = useContext(IATraderContext);
 
-  
+  const [ptStartDate] = useUserStorage("ptStartDate", null); // ✅ déplacé ici (dans le corps du composant)
 
   const fmt = (v, d = 2) => (v ? Number(v).toFixed(d) : "0.00");
 

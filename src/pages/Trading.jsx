@@ -1,8 +1,8 @@
-// src/pages/Trading.jsx
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import fetchPrices from "../utils/fetchPrices";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
+import { useUserStorage } from "../hooks/useUserStorage";
 
 const Trading = () => {
   const {
@@ -20,7 +20,11 @@ const Trading = () => {
   const [top5Up, setTop5Up] = useState([]);
   const [top5Down, setTop5Down] = useState([]);
   const [updatedPrices, setUpdatedPrices] = useState({});
-  const startDate = localStorage.getItem("ptStartDate");
+  const [startDate, setStartDate] = useUserStorage("ptStartDate", new Date());
+
+  useEffect(() => {
+    setStartDate(startDate);
+  }, [startDate]);
 
   const openSell = (symbol, price) => {
     setSellSymbol(symbol);
@@ -41,17 +45,21 @@ const Trading = () => {
     const input = window.prompt(`Montant en USD à investir dans ${symbol} :`, "100");
     const tp = window.prompt("Take Profit en % (0 = désactivé)", "0");
     const sl = window.prompt("Stop Loss en % (0 = désactivé)", "0");
+
     const amount = parseFloat(input);
     const tpPercent = parseFloat(tp);
     const slPercent = parseFloat(sl);
+
     if (isNaN(amount) || amount <= 0 || isNaN(tpPercent) || isNaN(slPercent)) {
       alert("Valeurs invalides.");
       return;
     }
+
     if (amount > cash) {
       alert("Fonds insuffisants !");
       return;
     }
+
     if (window.confirm(`Confirmer achat de ${symbol} pour $${amount.toFixed(2)} (TP : ${tpPercent}%, SL : ${slPercent}%) ?`)) {
       const quantity = amount / price;
       buyPosition(symbol, quantity, price, tpPercent, slPercent);
@@ -61,14 +69,16 @@ const Trading = () => {
   const handleUpdatePrices = async () => {
     const updateBtn = document.getElementById("update-btn");
     if (updateBtn) {
-      updateBtn.classList.add("wizz");
-      setTimeout(() => updateBtn.classList.remove("wizz"), 400);
+      updateBtn.classList.add("shake");
+      setTimeout(() => updateBtn.classList.remove("shake"), 500);
     }
+
     try {
       const { top5Up, top5Down, rest } = await fetchPrices();
       const now = new Date().toLocaleTimeString();
       const merged = [...top5Up, ...top5Down, ...rest];
       const unique = Array.from(new Map(merged.map(c => [c.symbol, c])).values());
+
       const changed = {};
       unique.forEach((c) => {
         const prev = cryptos.find((p) => p.symbol === c.symbol);
@@ -77,6 +87,7 @@ const Trading = () => {
         }
       });
       setUpdatedPrices(changed);
+
       setCryptos(unique);
       setTop5Up(top5Up);
       setTop5Down(top5Down);
@@ -99,6 +110,7 @@ const Trading = () => {
       if (!curr) return;
       const tp = p.tpPercent || 0;
       const sl = p.slPercent || 0;
+
       if (tp > 0 && curr >= p.buyPrice * (1 + tp / 100)) {
         sellPosition(p.id, p.quantity, curr);
       } else if (sl > 0 && curr <= p.buyPrice * (1 - sl / 100)) {
@@ -134,6 +146,7 @@ const Trading = () => {
   const renderCryptoBlock = (c) => {
     const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
     const animate = updatedPrices[c.symbol];
+
     return (
       <div key={c.symbol} style={{
         borderLeft: `6px solid ${c.change5min >= 0 ? "#0f0" : "#f00"}`,
@@ -146,7 +159,7 @@ const Trading = () => {
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{c.symbol}</div>
-          <div className={animate ? "price-update" : ""} style={{ color: "#ccc", fontSize: "1rem", transition: "transform 0.3s ease" }}>
+          <div className={animate ? "animate-price" : ""} style={{ color: "#ccc", fontSize: "1rem" }}>
             ${c.currentPrice?.toFixed(4)}
           </div>
           <div style={{ fontSize: "0.9rem", color: "#ccc", lineHeight: "1.4" }}>
@@ -175,22 +188,21 @@ const Trading = () => {
       color: "#fff",
       fontFamily: "sans-serif"
     }}>
-      {/* 🔒 EN-TÊTE STICKY */}
+      {/* sticky header */}
       <div style={{
-  position: "sticky",
-  top: "5rem", // ✅ marge fixe pour laisser la place au titre + burger
-  zIndex: 100,
-  backgroundColor: "rgba(0,0,0,0.6)",
-  backdropFilter: "blur(8px)",
-  padding: "1rem",
-  marginBottom: "2rem",
-  borderRadius: "6px"
-}}>
+        position: "sticky",
+        top: "0",
+        zIndex: 100,
+        backgroundColor: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(8px)",
+        padding: "1rem",
+        marginBottom: "2rem",
+        borderRadius: "6px"
+      }}>
         <h1>💸 TradingVirtuel</h1>
         <h2 style={{ marginTop: "-1rem", color: "#aaa" }}>
-          {portfolioName} | 🕒 Début : {startDate ? new Date(startDate).toLocaleString() : "—"}
+          {portfolioName} | 🕒 Début : {new Date(startDate).toLocaleString()}
         </h2>
-
         <div style={{ marginTop: "1rem" }}>
           <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
           <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
@@ -202,7 +214,6 @@ const Trading = () => {
             📌 Positions placées : {positionSummary.count} | Valeur actuelle : ${positionSummary.value.toFixed(2)}
           </div>
         </div>
-
         <div style={{ marginTop: "1rem" }}>
           <button id="update-btn" onClick={handleUpdatePrices} style={{
             marginRight: "1rem",
@@ -224,6 +235,7 @@ const Trading = () => {
         </div>
       </div>
 
+      {/* Top hausses */}
       <div style={{ marginBottom: "1.5rem" }}>
         <h3>📈 Top 5 hausses</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -231,6 +243,7 @@ const Trading = () => {
         </div>
       </div>
 
+      {/* Top baisses */}
       <div style={{ marginBottom: "1.5rem" }}>
         <h3>📉 Top 5 baisses</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -238,6 +251,7 @@ const Trading = () => {
         </div>
       </div>
 
+      {/* Autres cryptos */}
       <h3>🧾 Autres cryptos</h3>
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {sortedCryptos.map(renderCryptoBlock)}
@@ -255,9 +269,8 @@ const Trading = () => {
         onConfirm={confirmSell}
       />
 
-      {/* 🔤 Animations */}
       <style>{`
-        @keyframes wizz {
+        @keyframes shake {
           0% { transform: translateX(0); }
           20% { transform: translateX(-3px); }
           40% { transform: translateX(3px); }
@@ -265,20 +278,16 @@ const Trading = () => {
           80% { transform: translateX(2px); }
           100% { transform: translateX(0); }
         }
-
-        .wizz {
-          animation: wizz 0.3s ease-in-out;
+        .shake {
+          animation: shake 0.4s ease-in-out;
         }
-
-        @keyframes priceScale {
+        .animate-price {
+          animation: pulse 0.3s ease-in-out;
+        }
+        @keyframes pulse {
           0% { transform: scale(1); }
-          30% { transform: scale(1.3); }
-          60% { transform: scale(0.9); }
+          50% { transform: scale(1.08); }
           100% { transform: scale(1); }
-        }
-
-        .price-update {
-          animation: priceScale 0.4s ease-in-out;
         }
       `}</style>
     </div>

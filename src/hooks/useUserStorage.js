@@ -1,12 +1,17 @@
 import { useAuth } from "../context/AuthContext";
 
 export const useUserStorage = (key, fallback = null) => {
-  const { user } = useAuth(); // ✅ déplacé ici
-  const fullKey = `${key}-${user?.uid || "anonymous"}`;
+  const { user } = useAuth();
+  const uid = user?.uid;
+
+  // 💥 Si pas de user (encore), évite l'erreur
+  if (!uid) return [fallback, () => {}];
+
+  const fullKey = `${key}-${uid}`;
 
   const get = () => {
-    const raw = localStorage.getItem(fullKey);
     try {
+      const raw = localStorage.getItem(fullKey);
       return raw ? JSON.parse(raw) : fallback;
     } catch {
       return fallback;
@@ -14,7 +19,11 @@ export const useUserStorage = (key, fallback = null) => {
   };
 
   const set = (value) => {
-    localStorage.setItem(fullKey, JSON.stringify(value));
+    try {
+      localStorage.setItem(fullKey, JSON.stringify(value));
+    } catch (e) {
+      console.error("Erreur storage:", e);
+    }
   };
 
   return [get(), set];
