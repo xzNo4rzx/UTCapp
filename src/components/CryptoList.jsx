@@ -1,13 +1,15 @@
 import React from "react";
 
 const formatPrice = (value) => {
+  if (!value || isNaN(value)) return "—";
   if (value >= 1) return value.toFixed(2);
   if (value >= 0.01) return value.toFixed(4);
   return value.toFixed(6);
 };
 
 const formatPercent = (value) => {
-  const fixed = value?.toFixed(2);
+  if (typeof value !== "number") return "—";
+  const fixed = value.toFixed(2);
   const color = value >= 0 ? "lightgreen" : "salmon";
   return <span style={{ color }}>{fixed}%</span>;
 };
@@ -32,20 +34,23 @@ const CryptoList = ({ cryptos, positions, onBuy, onOpenSell }) => {
           </thead>
           <tbody>
             {cryptos.map((c, i) => {
-              const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
+              const pos = positions?.find((p) => p.symbol === c.symbol);
+              const hasPosition = pos && pos.quantity > 0;
+              const fallbackPrice = c.currentPrice ?? pos?.buyPrice ?? 0;
+
               return (
                 <tr key={c.symbol} style={{ backgroundColor: i % 2 === 0 ? "#1e1e1e" : "#252525" }}>
                   <td style={{ padding: "6px", color: "#fff" }}>{c.symbol}</td>
-                  <td style={{ padding: "6px", color: "#ccc" }}>${formatPrice(c.currentPrice)}</td>
+                  <td style={{ padding: "6px", color: "#ccc" }}>${formatPrice(fallbackPrice)}</td>
                   <td style={{ padding: "6px" }}>{formatPercent(c.change5min)}</td>
                   <td style={{ padding: "6px" }}>{formatPercent(c.change1d)}</td>
                   <td style={{ padding: "6px" }}>{formatPercent(c.change7d)}</td>
                   <td style={{ padding: "6px" }}>
-                    <button onClick={() => onBuy(c.symbol, c.currentPrice)}>ACHAT</button>
+                    <button onClick={() => onBuy(c.symbol, fallbackPrice)}>ACHAT</button>
                   </td>
                   <td style={{ padding: "6px" }}>
                     <button
-                      onClick={() => onOpenSell(c.symbol, c.currentPrice)}
+                      onClick={() => onOpenSell(c.symbol, fallbackPrice)}
                       disabled={!hasPosition}
                       style={{
                         backgroundColor: hasPosition ? "#dc3545" : "#555",

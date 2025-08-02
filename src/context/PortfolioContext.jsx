@@ -14,7 +14,16 @@ const getCurrentPrices = async (symbols) => {
   const url = `${BASE_URL}/pricemulti?fsyms=${symbols.join(",")}&tsyms=USD&api_key=${API_KEY}`;
   try {
     const { data } = await axios.get(url);
-    return data;
+    const result = {};
+    for (const sym of symbols) {
+      const usd = data?.[sym]?.USD;
+      if (typeof usd === "number" && usd > 0) {
+        result[sym] = usd;
+      } else {
+        console.warn(`⛔️ Prix invalide pour ${sym}, on garde l'ancien`);
+      }
+    }
+    return result;
   } catch (err) {
     console.error("Erreur récupération des prix :", err);
     return {};
@@ -29,11 +38,10 @@ export const PortfolioProvider = ({ children }) => {
   const [cash, setCash] = useState(10000);
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
-  const [currentPrices, setCurrentPrices] = useState([]);
+  const [currentPrices, setCurrentPrices] = useState({});
   const [nidList, setNidList] = useState([]);
   const [ptNames, setPtNames] = useState([]);
 
-  // 🔁 Charger le portefeuille depuis Firestore à l'ouverture
   useEffect(() => {
     const load = async () => {
       if (!user) return;
@@ -50,7 +58,6 @@ export const PortfolioProvider = ({ children }) => {
     load();
   }, [user]);
 
-  // 🔁 Sauvegarder le portefeuille après chaque modif
   const syncToFirestore = () => {
     if (!user) return;
     savePortfolio(user.uid, {
@@ -67,14 +74,19 @@ export const PortfolioProvider = ({ children }) => {
   const updatePrices = async () => {
     const syms = positions.map((p) => p.symbol);
     const fresh = await getCurrentPrices(syms);
-    const map = {};
-    for (const sym of syms) map[sym] = fresh[sym]?.USD ?? null;
-    setCurrentPrices(map);
+    setCurrentPrices((prev) => {
+      const updated = { ...prev };
+      for (const sym of syms) {
+        if (typeof fresh[sym] === "number" && fresh[sym] > 0) {
+          updated[sym] = fresh[sym];
+        }
+      }
+      return updated;
+    });
   };
 
   useEffect(() => {
     updatePrices();
-
     if (useIAActive()) {
       const loop = setInterval(async () => {
         try {
@@ -86,7 +98,7 @@ export const PortfolioProvider = ({ children }) => {
           if (already || cash < 10) return;
 
           const prices = await getCurrentPrices([latest.crypto]);
-          const curr = prices[latest.crypto]?.USD;
+          const curr = typeof prices[latest.crypto] === "number" ? prices[latest.crypto] : null;
           if (!curr) return;
 
           const invest = cash / 3;
@@ -104,7 +116,10 @@ export const PortfolioProvider = ({ children }) => {
   const investedAmount = positions.reduce((s, p) => s + p.quantity * p.buyPrice, 0);
   const totalProfit =
     history.filter(t => t.type === "sell").reduce((s, t) => s + t.profit, 0) +
-    positions.reduce((s, p) => s + p.quantity * ((currentPrices[p.symbol] ?? 0) - p.buyPrice), 0);
+    positions.reduce((s, p) => {
+      const price = typeof currentPrices[p.symbol] === "number" ? currentPrices[p.symbol] : p.buyPrice;
+      return s + p.quantity * (price - p.buyPrice);
+    }, 0);
   const totalProfitPercent = investedAmount ? (totalProfit / 10000) * 100 : 0;
 
   const buyPosition = (symbol, quantity, price, tpPercent = 0, slPercent = 0) => {

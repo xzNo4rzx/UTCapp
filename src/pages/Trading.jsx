@@ -106,7 +106,7 @@ const Trading = () => {
 
   useEffect(() => {
     positions.forEach((p) => {
-      const curr = currentPrices[p.symbol];
+      const curr = currentPrices[p.symbol] ?? p.buyPrice;
       if (!curr) return;
       const tp = p.tpPercent || 0;
       const sl = p.slPercent || 0;
@@ -133,7 +133,7 @@ const Trading = () => {
 
   const positionSummary = useMemo(() => {
     const total = (positions ?? []).reduce((sum, p) => {
-      const curr = currentPrices?.[p.symbol] ?? 0;
+      const curr = currentPrices?.[p.symbol] ?? p.buyPrice;
       return sum + p.quantity * curr;
     }, 0);
     return { count: positions?.length ?? 0, value: total };
