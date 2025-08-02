@@ -36,9 +36,9 @@ const Register = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: "cover",
+      backgroundSize: '100% auto',
       backgroundPosition: "center",
-      backgroundAttachment: "fixed",
+      backgroundAttachment: 'fixed',
       minHeight: "100vh",
       padding: "6rem 1rem 2rem",
       display: "flex",

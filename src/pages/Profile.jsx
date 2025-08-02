@@ -59,8 +59,8 @@ const Profile = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: "cover",
-      backgroundAttachment: "fixed",
+      backgroundSize: '100% auto',
+      backgroundAttachment: 'fixed',
       backgroundPosition: "center",
       minHeight: "100vh",
       padding: "6rem 2rem 2rem",

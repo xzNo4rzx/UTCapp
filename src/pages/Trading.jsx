@@ -180,9 +180,9 @@ const Trading = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: "cover",
+      backgroundSize: '100% auto',
       backgroundPosition: "center",
-      backgroundAttachment: "fixed",
+      backgroundAttachment: 'fixed',
       padding: "6rem 2rem 2rem",
       minHeight: "100vh",
       color: "#fff",

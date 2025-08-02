@@ -26,9 +26,9 @@ const IATrader = () => {
     <div style={{
       padding: "6rem 2rem 2rem",
       backgroundImage: 'url("/backgrounds/iatraderbackground.png")',
-      backgroundSize: "cover",
+      backgroundSize: '100% auto',
       backgroundPosition: "center",
-      backgroundAttachment: "fixed",
+      backgroundAttachment: 'fixed',
       color: "#fff",
       fontFamily: "sans-serif",
       minHeight: "100vh"

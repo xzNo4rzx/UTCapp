@@ -125,9 +125,9 @@ const Home = () => {
 const pageStyle = {
   padding: "6rem 2rem 2rem",
   backgroundImage: 'url("/backgrounds/homebackground.png")',
-  backgroundSize: "cover",
+  backgroundSize: '100% auto',
   backgroundPosition: "center",
-  backgroundAttachment: "fixed",
+  backgroundAttachment: 'fixed',
   minHeight: "100vh",
   color: "#eee"
 };
