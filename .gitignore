@@ -30,4 +30,4 @@ node_modules/.cache/
 .DS_Store
 
 # GitHub Pages cache
-node_modules/.cache/gh-pages/
+node_modules/.cache/gh-pages/dedup_cache.json
