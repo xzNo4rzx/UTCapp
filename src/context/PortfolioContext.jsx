@@ -11,23 +11,36 @@ const BASE_URL = "https://min-api.cryptocompare.com/data";
 
 const getCurrentPrices = async (symbols) => {
   if (symbols.length === 0) return {};
-  const url = `${BASE_URL}/pricemulti?fsyms=${symbols.join(",")}&tsyms=USD&api_key=${API_KEY}`;
+  const urlCryptoCompare = `${BASE_URL}/pricemulti?fsyms=${symbols.join(",")}&tsyms=USD&api_key=${API_KEY}`;
+  const urlBinance = (sym) => `https://api.binance.com/api/v3/ticker/price?symbol=${sym}USDT`;
+
+  const result = {};
+
   try {
-    const { data } = await axios.get(url);
-    const result = {};
+    const { data } = await axios.get(urlCryptoCompare);
     for (const sym of symbols) {
       const usd = data?.[sym]?.USD;
       if (typeof usd === "number" && usd > 0) {
         result[sym] = usd;
       } else {
-        console.warn(`⛔️ Prix invalide pour ${sym}, on garde l'ancien`);
+        console.warn(`⛔️ Prix invalide pour ${sym}, fallback Binance...`);
+        try {
+          const res = await axios.get(urlBinance(sym));
+          const binancePrice = parseFloat(res.data?.price);
+          if (!isNaN(binancePrice)) {
+            result[sym] = binancePrice;
+            console.log(`✅ Binance fallback ${sym} : ${binancePrice}`);
+          }
+        } catch {
+          console.warn(`❌ Fallback Binance échoué pour ${sym}`);
+        }
       }
     }
-    return result;
   } catch (err) {
-    console.error("Erreur récupération des prix :", err);
-    return {};
+    console.error("Erreur récupération CryptoCompare :", err);
   }
+
+  return result;
 };
 
 const useIAActive = () => typeof window !== "undefined" && window.location.pathname.includes("iatrader");
