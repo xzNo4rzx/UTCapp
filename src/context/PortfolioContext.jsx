@@ -1,7 +1,8 @@
 import { createContext, useState, useEffect } from "react";
 import axios from "axios";
 import fetchSignals from "../utils/fetchSignals";
-import { useUserStorage } from "../hooks/useUserStorage";
+import { useAuth } from "./AuthContext";
+import { loadPortfolio, savePortfolio } from "../utils/firestorePortfolio";
 
 export const PortfolioContext = createContext();
 
@@ -23,24 +24,45 @@ const getCurrentPrices = async (symbols) => {
 const useIAActive = () => typeof window !== "undefined" && window.location.pathname.includes("iatrader");
 
 export const PortfolioProvider = ({ children }) => {
-  const [ptNames, setPtNames] = useUserStorage("ptNames", []);
-  const [nidList, setNidList] = useUserStorage("pt-nid", []);
-  const [cash, setCash] = useUserStorage("pt-cash", 10000);
-  const [positions, setPositions] = useUserStorage("pt-positions", []);
-  const [history, setHistory] = useUserStorage("pt-history", []);
-  const [currentPrices, setCurrentPrices] = useState({});
+  const { user } = useAuth();
+  const [portfolioName, setPortfolioName] = useState("");
+  const [cash, setCash] = useState(10000);
+  const [positions, setPositions] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [currentPrices, setCurrentPrices] = useState([]);
+  const [nidList, setNidList] = useState([]);
+  const [ptNames, setPtNames] = useState([]);
 
-  const now = new Date();
-  const base = `PT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const count = (ptNames.filter((n) => n.startsWith(base)).length + 1).toString().padStart(3, "0");
-  const name = `${base}-${count}`;
-  const [portfolioName, setPortfolioName] = useState(name);
-
+  // 🔁 Charger le portefeuille depuis Firestore à l'ouverture
   useEffect(() => {
-    if (!ptNames.includes(name)) {
-      setPtNames([...ptNames, name]);
-    }
-  }, []);
+    const load = async () => {
+      if (!user) return;
+      const data = await loadPortfolio(user.uid);
+      if (data) {
+        setCash(data.cash ?? 10000);
+        setPositions(data.positions ?? []);
+        setHistory(data.history ?? []);
+        setPortfolioName(data.name ?? "PT");
+        setPtNames(data.ptNames ?? []);
+        setNidList(data.nidList ?? []);
+      }
+    };
+    load();
+  }, [user]);
+
+  // 🔁 Sauvegarder le portefeuille après chaque modif
+  const syncToFirestore = () => {
+    if (!user) return;
+    savePortfolio(user.uid, {
+      name: portfolioName,
+      cash,
+      positions,
+      history,
+      ptNames,
+      nidList,
+      updatedAt: new Date().toISOString()
+    });
+  };
 
   const updatePrices = async () => {
     const syms = positions.map((p) => p.symbol);
@@ -52,6 +74,7 @@ export const PortfolioProvider = ({ children }) => {
 
   useEffect(() => {
     updatePrices();
+
     if (useIAActive()) {
       const loop = setInterval(async () => {
         try {
@@ -73,7 +96,7 @@ export const PortfolioProvider = ({ children }) => {
         } catch (e) {
           console.error("IA Trader erreur :", e);
         }
-      }, 60_000);
+      }, 60000);
       return () => clearInterval(loop);
     }
   }, [positions]);
@@ -90,12 +113,17 @@ export const PortfolioProvider = ({ children }) => {
     const letter = nidList.length < 9 ? "A" : "B";
     const padded = String(nidList.length + 1).padStart(3, "0");
     const id = `${dateStr}-${padded}${letter}${(nidList.length % 9) + 1}`;
-    setNidList([...nidList, id]);
 
     const investment = quantity * price;
-    setPositions([...positions, { id, symbol, quantity, buyPrice: price, date: now.toISOString(), tpPercent, slPercent }]);
+    const newPos = [...positions, { id, symbol, quantity, buyPrice: price, date: now.toISOString(), tpPercent, slPercent }];
+    const newHistory = [{ id, type: "buy", symbol, quantity, buyPrice: price, investment, date: now.toISOString() }, ...history];
+
+    setNidList([...nidList, id]);
+    setPositions(newPos);
     setCash(cash - investment);
-    setHistory([{ id, type: "buy", symbol, quantity, buyPrice: price, investment, date: now.toISOString() }, ...history]);
+    setHistory(newHistory);
+
+    syncToFirestore();
   };
 
   const sellPosition = (positionId, quantity, sellPrice) => {
@@ -126,18 +154,23 @@ export const PortfolioProvider = ({ children }) => {
       },
       ...history,
     ]);
+
+    syncToFirestore();
   };
 
   const resetPortfolio = () => {
+    const now = new Date();
+    const base = `PT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const count = (ptNames.filter((n) => n.startsWith(base)).length + 1).toString().padStart(3, "0");
-    const newName = `${base}-${count}`;
-    setPtNames([...ptNames, newName]);
-    setNidList([]);
-    setPortfolioName(newName);
+    const name = `${base}-${count}`;
+    setPtNames([...ptNames, name]);
+    setPortfolioName(name);
     setCash(10000);
     setPositions([]);
     setHistory([]);
+    setNidList([]);
     setCurrentPrices({});
+    syncToFirestore();
   };
 
   return (
@@ -164,4 +197,3 @@ export const PortfolioProvider = ({ children }) => {
     </PortfolioContext.Provider>
   );
 };
-export default PortfolioProvider;

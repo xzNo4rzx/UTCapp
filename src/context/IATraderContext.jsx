@@ -1,65 +1,49 @@
-// src/context/IATraderContext.js
-
 import React, { createContext, useState, useEffect, useMemo } from "react";
 import axios from "axios";
+import { useAuth } from "./AuthContext";
+import { loadIATrader, saveIATrader } from "../utils/firestoreIATrader";
 
 export const IATraderContext = createContext();
 
 export const IATraderProvider = ({ children }) => {
-  // 1) Nom fixe de l'IA
+  const { user } = useAuth();
+
   const [iaName] = useState("IA Trader");
-
-  // 2) Date de démarrage, chargée une seule fois depuis localStorage ou initialisée maintenant
-  const [iaStart, setIaStart] = useState(() => {
-    const stored = localStorage.getItem("iaStartDate");
-    return stored || new Date().toISOString();
-  });
-
-  // 3) Cash initial
-  const [iaCash, setIaCash] = useState(() => {
-    const stored = localStorage.getItem("iaCash");
-    return stored ? parseFloat(stored) : 10000;
-  });
-
-  // 4) Positions ouvertes
-  const [iaPositions, setIaPositions] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("iaPositions")) || [];
-    } catch {
-      return [];
-    }
-  });
-
-  // 5) Historique des trades
-  const [iaHistory, setIaHistory] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("iaHistory")) || [];
-    } catch {
-      return [];
-    }
-  });
-
-  // 6) Prix courants pour les positions
+  const [iaStart, setIaStart] = useState(() => new Date().toISOString());
+  const [iaCash, setIaCash] = useState(10000);
+  const [iaPositions, setIaPositions] = useState([]);
+  const [iaHistory, setIaHistory] = useState([]);
   const [iaCurrentPrices, setIaCurrentPrices] = useState({});
 
-  // —————— Persistance dans localStorage ——————
+  // 🔄 Chargement depuis Firestore au login
   useEffect(() => {
-    localStorage.setItem("iaStartDate", iaStart);
-  }, [iaStart]);
+    if (!user) return;
+    const fetch = async () => {
+      const data = await loadIATrader(user.uid);
+      if (data) {
+        setIaStart(data.iaStart || new Date().toISOString());
+        setIaCash(data.iaCash || 10000);
+        setIaPositions(data.iaPositions || []);
+        setIaHistory(data.iaHistory || []);
+      }
+    };
+    fetch();
+  }, [user]);
 
+  // 💾 Sauvegarde vers Firestore à chaque modif
   useEffect(() => {
-    localStorage.setItem("iaCash", iaCash.toString());
-  }, [iaCash]);
+    if (!user) return;
+    const save = async () => {
+      await saveIATrader(user.uid, {
+        iaStart,
+        iaCash,
+        iaPositions,
+        iaHistory,
+      });
+    };
+    save();
+  }, [user, iaStart, iaCash, iaPositions, iaHistory]);
 
-  useEffect(() => {
-    localStorage.setItem("iaPositions", JSON.stringify(iaPositions));
-  }, [iaPositions]);
-
-  useEffect(() => {
-    localStorage.setItem("iaHistory", JSON.stringify(iaHistory));
-  }, [iaHistory]);
-
-  // —————— Mise à jour des prix via CryptoCompare ——————
   const updateIaPrices = async () => {
     const symbols = iaPositions.map((p) => p.symbol);
     if (symbols.length === 0) return;
@@ -84,7 +68,6 @@ export const IATraderProvider = ({ children }) => {
     }
   };
 
-  // —————— Réinitialisation complète de l’IA Trader ——————
   const resetIATrader = () => {
     const nowIso = new Date().toISOString();
     setIaStart(nowIso);
@@ -94,12 +77,8 @@ export const IATraderProvider = ({ children }) => {
     setIaCurrentPrices({});
   };
 
-  // —————— Calcul du profit total et % ——————
-  const investedAmount = useMemo(
-    () =>
-      iaPositions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0),
-    [iaPositions]
-  );
+  const investedAmount = useMemo(() =>
+    iaPositions.reduce((sum, p) => sum + p.quantity * p.buyPrice, 0), [iaPositions]);
 
   const iaTotalProfit = useMemo(() => {
     const closed = iaHistory
@@ -112,9 +91,7 @@ export const IATraderProvider = ({ children }) => {
     return closed + open;
   }, [iaHistory, iaPositions, iaCurrentPrices]);
 
-  const iaTotalProfitPercent = useMemo(() => {
-    return (iaTotalProfit / 10000) * 100;
-  }, [iaTotalProfit]);
+  const iaTotalProfitPercent = useMemo(() => (iaTotalProfit / 10000) * 100, [iaTotalProfit]);
 
   return (
     <IATraderContext.Provider
