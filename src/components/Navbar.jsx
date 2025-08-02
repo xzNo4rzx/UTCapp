@@ -34,14 +34,18 @@ const Navbar = () => {
     <>
       {/* ─── BURGER & TITLE ─────────────────────── */}
       <div style={{
-        position: "fixed",
-        top: "1rem",
-        left: "1rem",
-        zIndex: 1000,
-        display: "flex",
-        alignItems: "center",
-        gap: "1rem",
-      }}>
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100%",
+  padding: "1rem 1rem 1rem 1.5rem",
+  display: "flex",
+  alignItems: "center",
+  gap: "1rem",
+  backgroundColor: "rgba(0, 0, 0, 0.4)",
+  backdropFilter: "blur(8px)",
+  zIndex: 1000,
+}}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           style={{

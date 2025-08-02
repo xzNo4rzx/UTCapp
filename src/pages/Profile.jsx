@@ -30,8 +30,8 @@ const Profile = () => {
     return stored ? new Date(stored) : new Date();
   });
 
-  // chargé depuis /utcapp/variations
   const [variations, setVariations] = useState({});
+  const [animatedSymbols, setAnimatedSymbols] = useState([]);
 
   useEffect(() => {
     localStorage.setItem("ptStartDate", startDate.toISOString());
@@ -66,67 +66,108 @@ const Profile = () => {
 
   const fmt = (n) => Number(n).toFixed(2);
 
-  return (
-    <div style={{ padding: "2rem", backgroundColor: "#121212", color: "#fff", fontFamily: "sans-serif", minHeight: "100vh" }}>
-      <h1>👤 Mon Portefeuille</h1>
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-        <h2 style={{ color: "#aaa" }}>
-          {portfolioName} | 🕒 Début du PT : {startDate.toLocaleString()}
-        </h2>
-        <button
-          onClick={() => {
-            if (window.confirm("Confirmer la remise à zéro ?")) {
-              localStorage.removeItem("ptStartDate");
-              resetPortfolio();
-            }
-          }}
-          style={{ padding: "6px 12px", backgroundColor: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
-        >
-          🧨 RESET PT TO 10000$
-        </button>
-      </div>
+  const handleUpdatePrices = () => {
+    const btn = document.getElementById("update-btn");
+    if (btn) {
+      btn.classList.add("wizz");
+      setTimeout(() => btn.classList.remove("wizz"), 400);
+    }
 
-      {/* Bilan */}
-      <section style={{ backgroundColor: "#1e1e1e", padding: "1rem", borderRadius: "8px", marginTop: "1rem" }}>
-        <h3 style={{ marginTop: 0 }}>📊 Bilan</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-          <div>💼 Solde total : ${fmt(cash + investedAmount)}</div>
-          <div>💰 Cash disponible : ${fmt(cash)}</div>
-          <div>📈 Investi : ${fmt(investedAmount)}</div>
-          <div>📊 Positions ouvertes : {activePositionsCount}</div>
-          <div>🔁 Nombre de trades : {totalTrades}</div>
-          <div>✅ Trades positifs : {positiveTrades} / {totalTrades}</div>
-          <div style={{
-            marginLeft: "auto",
-            fontWeight: "bold",
-            fontSize: "1.1rem",
-            padding: "0.5rem 1rem",
-            backgroundColor: "#222",
-            borderRadius: "6px",
-            color: totalProfit >= 0 ? "lightgreen" : "salmon",
-          }}>
-            📈 Rendement total : ${fmt(totalProfit)} ({fmt(totalProfitPercent)}%)
-          </div>
+    const previousPrices = {};
+    positions.forEach((p) => {
+      previousPrices[p.symbol] = currentPrices[p.symbol] ?? 0;
+    });
+
+    updatePrices();
+
+    const newPrices = {};
+    setTimeout(() => {
+      const updated = [];
+      positions.forEach((p) => {
+        const oldP = previousPrices[p.symbol];
+        const newP = currentPrices[p.symbol];
+        if (newP !== undefined && oldP !== newP) {
+          updated.push(p.symbol);
+        }
+      });
+      setAnimatedSymbols(updated);
+      setTimeout(() => setAnimatedSymbols([]), 600);
+    }, 200);
+  };
+
+  return (
+    <div
+      style={{
+        backgroundImage: 'url("/backgrounds/homebackground.png")',
+        backgroundSize: "cover",
+        backgroundAttachment: "fixed",
+        backgroundPosition: "center",
+        minHeight: "100vh",
+        padding: "6rem 2rem 2rem",
+        fontFamily: "sans-serif",
+        color: "#fff",
+      }}
+    >
+      {/* 🔒 Titre + Bilan sticky */}
+      <div style={{ position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(8px)", backgroundColor: "rgba(0,0,0,0.6)", padding: "1rem", borderRadius: "8px", marginBottom: "2rem" }}>
+        <h1>👤 Mon Portefeuille</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+          <h2 style={{ color: "#aaa" }}>
+            {portfolioName} | 🕒 Début du PT : {startDate.toLocaleString()}
+          </h2>
           <button
-            onClick={updatePrices}
-            style={{
-              marginLeft: "auto",
-              padding: "8px 16px",
-              backgroundColor: "#007bff",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-              animation: "shake 0.4s",
+            onClick={() => {
+              if (window.confirm("Confirmer la remise à zéro ?")) {
+                localStorage.removeItem("ptStartDate");
+                resetPortfolio();
+              }
             }}
+            style={{ padding: "6px 12px", backgroundColor: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
           >
-            🔄 UPDATE PRICES NOW
+            🧨 RESET PT TO 10000$
           </button>
         </div>
-      </section>
 
-      {/* Positions en cours */}
-      <section style={{ marginTop: "2rem" }}>
+        <section style={{ marginTop: "1rem" }}>
+          <h3 style={{ marginTop: 0 }}>📊 Bilan</h3>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
+            <div>💼 Solde total : ${fmt(cash + investedAmount)}</div>
+            <div>💰 Cash disponible : ${fmt(cash)}</div>
+            <div>📈 Investi : ${fmt(investedAmount)}</div>
+            <div>📊 Positions ouvertes : {activePositionsCount}</div>
+            <div>🔁 Nombre de trades : {totalTrades}</div>
+            <div>✅ Trades positifs : {positiveTrades} / {totalTrades}</div>
+            <div style={{
+              fontWeight: "bold",
+              fontSize: "1.1rem",
+              padding: "0.5rem 1rem",
+              backgroundColor: "#222",
+              borderRadius: "6px",
+              color: totalProfit >= 0 ? "lightgreen" : "salmon",
+              marginLeft: "auto"
+            }}>
+              📈 Rendement total : ${fmt(totalProfit)} ({fmt(totalProfitPercent)}%)
+            </div>
+            <button
+              id="update-btn"
+              onClick={handleUpdatePrices}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#007bff",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer"
+              }}
+            >
+              🔄 UPDATE PRICES NOW
+            </button>
+          </div>
+        </section>
+      </div>
+
+      {/* 🔄 Positions en cours */}
+      <section>
         <h3>📌 Positions en cours</h3>
         {positions.length === 0 ? (
           <p>Aucune position ouverte.</p>
@@ -143,14 +184,20 @@ const Profile = () => {
             return (
               <div key={p.id} style={{
                 borderLeft: `6px solid ${pnl >= 0 ? "#0f0" : "#f00"}`,
-                backgroundColor: "#1e1e1e",
+                backgroundColor: "rgba(30,30,30,0.6)",
+                backdropFilter: "blur(8px)",
                 borderRadius: "8px",
                 padding: "1rem",
                 marginBottom: "1rem"
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap" }}>
                   <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{p.symbol}</div>
-                  <div style={{ color: curr >= p.buyPrice ? "lightgreen" : "salmon" }}>${fmt(curr)}</div>
+                  <div
+                    className={animatedSymbols.includes(p.symbol) ? "wizz" : ""}
+                    style={{ color: curr >= p.buyPrice ? "lightgreen" : "salmon" }}
+                  >
+                    ${fmt(curr)}
+                  </div>
                   <div style={{ color: pnl >= 0 ? "lightgreen" : "salmon" }}>
                     {fmt(pnl)}$ / {fmt(pnlPct)}%
                   </div>
@@ -158,9 +205,7 @@ const Profile = () => {
                 <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#ccc" }}>
                   🕒 {new Date(p.date).toLocaleString()} | ID : {p.id} | Investi : ${fmt(inv)} | Achat : ${fmt(p.buyPrice)}
                 </div>
-                <div style={{ marginTop: "0.25rem", fontSize: "0.9rem", color: "#aaa" }}>
-                  📊 Variation : {changeLine}
-                </div>
+                
                 <div style={{ marginTop: "0.5rem" }}>
                   <button
                     onClick={() => handleSell(p.symbol, curr)}
@@ -175,8 +220,8 @@ const Profile = () => {
         )}
       </section>
 
-      {/* Historique */}
-      <section style={{ marginTop: "2rem" }}>
+      {/* 🕓 Historique scrollable */}
+      <section style={{ marginTop: "2rem", maxHeight: "400px", overflowY: "auto" }}>
         <h3>🕓 Historique</h3>
         {history.length === 0 ? (
           <p>Aucun trade enregistré.</p>
@@ -188,7 +233,8 @@ const Profile = () => {
             return (
               <div key={t.id} style={{
                 borderLeft: `6px solid ${t.type === "sell" ? (t.profit >= 0 ? "#0f0" : "#f00") : "#888"}`,
-                backgroundColor: "#1e1e1e",
+                backgroundColor: "rgba(30,30,30,0.6)",
+                backdropFilter: "blur(8px)",
                 borderRadius: "8px",
                 padding: "1rem",
                 marginBottom: "1rem"
@@ -222,6 +268,17 @@ const Profile = () => {
         onClose={() => setSellModal(false)}
         onConfirm={confirmSell}
       />
+
+      <style>{`
+        @keyframes wizz {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.08); }
+          100% { transform: scale(1); }
+        }
+        .wizz {
+          animation: wizz 0.4s ease-in-out;
+        }
+      `}</style>
     </div>
   );
 };

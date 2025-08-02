@@ -34,48 +34,72 @@ const Register = () => {
   };
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "sans-serif", backgroundColor: "#121212", minHeight: "100vh", color: "#fff" }}>
-      <h1>Créer un compte</h1>
-      <form onSubmit={handleSubmit} style={{ maxWidth: "400px", marginTop: "2rem" }}>
-        <div style={{ marginBottom: "1rem" }}>
-          <label>Email :</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: "100%", padding: "0.5rem", marginTop: "0.5rem" }}
-          />
-        </div>
-        <div style={{ marginBottom: "1rem" }}>
-          <label>Mot de passe :</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: "100%", padding: "0.5rem", marginTop: "0.5rem" }}
-          />
-        </div>
-        {error && (
-          <div style={{ color: "salmon", marginBottom: "1rem" }}>
-            {error}
+    <div style={{
+      backgroundImage: 'url("/backgrounds/homebackground.png")',
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundAttachment: "fixed",
+      minHeight: "100vh",
+      padding: "6rem 1rem 2rem",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "flex-start",
+      fontFamily: "sans-serif",
+      color: "#fff"
+    }}>
+      <div style={{
+        backgroundColor: "rgba(0, 0, 0, 0.6)",
+        backdropFilter: "blur(8px)",
+        padding: "2rem",
+        borderRadius: "12px",
+        maxWidth: "400px",
+        width: "100%"
+      }}>
+        <h2 style={{ marginBottom: "1.5rem", textAlign: "center" }}>📝 Demande d'inscription</h2>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div>
+            <label htmlFor="email" style={{ display: "block", marginBottom: "0.5rem", color: "#ccc" }}>Email :</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "1rem" }}
+            />
           </div>
-        )}
-        <button
-          type="submit"
-          style={{
-            backgroundColor: "#4ea8de",
-            color: "#fff",
-            padding: "0.5rem 1rem",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          S’inscrire
-        </button>
-      </form>
+          <div>
+            <label htmlFor="password" style={{ display: "block", marginBottom: "0.5rem", color: "#ccc" }}>Mot de passe :</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "1rem" }}
+            />
+          </div>
+          {error && <div style={{ color: "salmon", textAlign: "center" }}>{error}</div>}
+          <button
+            type="submit"
+            style={{
+              backgroundColor: "#4ea8de",
+              color: "#fff",
+              padding: "10px",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: "1rem"
+            }}
+          >
+            S’inscrire
+          </button>
+        </form>
+        <p style={{ marginTop: "1.5rem", fontSize: "0.9rem", color: "#aaa", textAlign: "center" }}>
+          Une fois votre compte créé, il devra être validé par l’administrateur avant que vous puissiez vous connecter.
+        </p>
+      </div>
     </div>
   );
 };

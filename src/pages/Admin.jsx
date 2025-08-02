@@ -55,7 +55,6 @@ const Admin = () => {
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       alert("✅ Message envoyé !");
       setAdminMessage("");
     } catch (err) {
@@ -71,46 +70,81 @@ const Admin = () => {
   }, []);
 
   return (
-    <div style={{ padding: "2rem", background: "#121212", color: "#fff", minHeight: "100vh", fontFamily: "sans-serif" }}>
-      <h1>🛠️ Tableau de bord Admin</h1>
+    <div style={{
+      backgroundImage: 'url("/backgrounds/homebackground.png")',
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundAttachment: "fixed",
+      padding: "6rem 2rem 2rem",
+      color: "#fff",
+      fontFamily: "sans-serif",
+      minHeight: "100vh"
+    }}>
+      <div style={{
+        backgroundColor: "rgba(0, 0, 0, 0.6)",
+        backdropFilter: "blur(10px)",
+        padding: "2rem",
+        borderRadius: "12px",
+        marginBottom: "2rem"
+      }}>
+        <h1>🛠️ Tableau de bord Admin</h1>
 
-      {/* Utilisateurs */}
-      <table style={{ width: "100%", marginTop: "2rem", background: "#1e1e1e", borderCollapse: "collapse" }}>
-        <thead><tr style={{ background: "#333" }}>
-          <th style={{ padding: 8 }}>Email</th>
-          <th style={{ padding: 8 }}>Nom</th>
-          <th style={{ padding: 8 }}>Statut</th>
-          <th style={{ padding: 8 }}>Action</th>
-        </tr></thead>
-        <tbody>
-          {users.map((u, i) => (
-            <tr key={u.id} style={{ background: i % 2 === 0 ? "#222" : "#2a2a2a" }}>
-              <td style={{ padding: 8 }}>{u.email}</td>
-              <td style={{ padding: 8 }}>{u.displayName || "—"}</td>
-              <td style={{
-                padding: 8,
-                color: u.status === "accepted" ? "lightgreen" : u.status === "refused" ? "salmon" : "#ccc"
-              }}>
-                {u.status || "en attente"}
-              </td>
-              <td style={{ padding: 8 }}>
-                <button onClick={() => updateStatus(u.id, "accepted")} style={{ marginRight: 8 }}>✅</button>
-                <button onClick={() => updateStatus(u.id, "refused")} style={{ background: "#a00", color: "#fff" }}>❌</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        {/* Utilisateurs */}
+        <div style={{ overflowX: "auto", marginTop: "2rem" }}>
+          <table style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "0.95rem",
+            minWidth: "600px"
+          }}>
+            <thead>
+              <tr style={{ backgroundColor: "#333" }}>
+                <th style={cellStyle}>Email</th>
+                <th style={cellStyle}>Nom</th>
+                <th style={cellStyle}>Statut</th>
+                <th style={cellStyle}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u, i) => (
+                <tr key={u.id} style={{ background: i % 2 === 0 ? "#222" : "#2a2a2a" }}>
+                  <td style={cellStyle}>{u.email}</td>
+                  <td style={cellStyle}>{u.displayName || "—"}</td>
+                  <td style={{ ...cellStyle, color: u.status === "accepted" ? "lightgreen" : u.status === "refused" ? "salmon" : "#ccc" }}>
+                    {u.status || "en attente"}
+                  </td>
+                  <td style={cellStyle}>
+                    <button onClick={() => updateStatus(u.id, "accepted")} style={btnStyle}>✅</button>
+                    <button onClick={() => updateStatus(u.id, "refused")} style={{ ...btnStyle, backgroundColor: "#a00" }}>❌</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Message Admin */}
-      <div style={{ marginTop: "3rem", padding: "1rem", background: "#1e1e1e", borderRadius: 8 }}>
+      <div style={{
+        backgroundColor: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(10px)",
+        padding: "2rem",
+        borderRadius: "12px"
+      }}>
         <h2>📨 Envoyer un message admin</h2>
         <textarea
           rows={4}
           value={adminMessage}
           onChange={e => setAdminMessage(e.target.value)}
           placeholder="Votre message ici…"
-          style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
+          style={{
+            width: "100%",
+            padding: "10px",
+            borderRadius: "6px",
+            border: "1px solid #444",
+            fontFamily: "inherit",
+            marginTop: "0.5rem"
+          }}
         />
         <button
           onClick={sendAdminMessage}
@@ -118,10 +152,11 @@ const Admin = () => {
           style={{
             marginTop: "1rem",
             padding: "10px 20px",
-            background: "#007bff",
+            backgroundColor: "#4ea8de",
             color: "#fff",
             border: "none",
-            borderRadius: 4,
+            borderRadius: "6px",
+            fontWeight: "bold",
             cursor: "pointer"
           }}
         >
@@ -130,6 +165,22 @@ const Admin = () => {
       </div>
     </div>
   );
+};
+
+const cellStyle = {
+  padding: "10px",
+  textAlign: "left",
+  borderBottom: "1px solid #444"
+};
+
+const btnStyle = {
+  padding: "6px 10px",
+  marginRight: "6px",
+  backgroundColor: "#10b981",
+  color: "#fff",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer"
 };
 
 export default Admin;

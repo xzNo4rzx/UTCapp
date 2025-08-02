@@ -14,7 +14,6 @@ import "chartjs-adapter-date-fns";
 
 ChartJS.register(TimeScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
-// Correspondance période → paramètres API
 const periodToApi = {
   "1h": { limit: 60, aggregate: 1, unit: "minute" },
   "1d": { limit: 24, aggregate: 1, unit: "hour" },
@@ -31,7 +30,6 @@ const Analysis = () => {
   const [dataPoints, setDataPoints] = useState([]);
   const [commentary, setCommentary] = useState("");
 
-  // 1) Récupération des données historiques
   useEffect(() => {
     const fetchHistorical = async () => {
       try {
@@ -61,7 +59,6 @@ const Analysis = () => {
     fetchHistorical();
   }, [symbol, period]);
 
-  // 2) Analyse simple : croisement SMA(5) / SMA(20)
   const signals = useMemo(() => {
     const shortW = 5, longW = 20;
     if (dataPoints.length < longW) return [];
@@ -69,7 +66,7 @@ const Analysis = () => {
     const sma = (arr, w) => arr.map((_, i) =>
       i < w - 1 ? null : arr.slice(i - w + 1, i + 1).reduce((a, b) => a + b, 0) / w
     );
-    const sma5  = sma(closes, shortW);
+    const sma5 = sma(closes, shortW);
     const sma20 = sma(closes, longW);
     const sigs = [];
     for (let i = 1; i < dataPoints.length; i++) {
@@ -83,7 +80,6 @@ const Analysis = () => {
     return sigs;
   }, [dataPoints]);
 
-  // 3) Préparation du graphique
   const chartData = useMemo(() => ({
     datasets: [
       {
@@ -126,11 +122,27 @@ const Analysis = () => {
   };
 
   return (
-    <div style={{ padding: "2rem", background: "#111", minHeight: "100vh", color: "#eee", fontFamily: "sans-serif" }}>
+    <div style={{
+      padding: "6rem 2rem 2rem",
+      marginTop: "4rem",
+      backgroundImage: 'url("/backgrounds/homebackground.png")',
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundAttachment: "fixed",
+      color: "#eee",
+      fontFamily: "sans-serif",
+      minHeight: "100vh"
+    }}>
       <h1>📊 Analyse {symbol}/USD — {period}</h1>
 
       {/* Sélection crypto et période */}
-      <div style={{ marginBottom: "1rem" }}>
+      <div style={{
+        marginBottom: "1rem",
+        backgroundColor: "rgba(0,0,0,0.5)",
+        padding: "1rem",
+        borderRadius: "8px",
+        backdropFilter: "blur(8px)"
+      }}>
         <select value={symbol} onChange={e => setSymbol(e.target.value)} style={{ padding: "0.5rem", marginRight: "1rem", background: "#222", color: "#eee", border: "1px solid #444" }}>
           {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -147,12 +159,25 @@ const Analysis = () => {
       </div>
 
       {/* Graphique */}
-      <div style={{ padding: "1rem", background: "#1f2937", borderRadius: "6px", boxShadow: "0 2px 8px rgba(0,0,0,0.7)" }}>
+      <div style={{
+        padding: "1rem",
+        backgroundColor: "rgba(0,0,0,0.5)",
+        borderRadius: "8px",
+        backdropFilter: "blur(8px)",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.6)"
+      }}>
         <Line data={chartData} options={options} />
       </div>
 
       {/* Légende */}
-      <div style={{ marginTop: "1.5rem", color: "#ccc" }}>
+      <div style={{
+        marginTop: "1.5rem",
+        color: "#ccc",
+        backgroundColor: "rgba(0,0,0,0.5)",
+        padding: "1rem",
+        borderRadius: "8px",
+        backdropFilter: "blur(8px)"
+      }}>
         <strong>Légende :</strong>
         <ul style={{ marginTop: "0.5rem", lineHeight: 1.6 }}>
           <li><span style={{ color: "#10b981" }}>▲</span> : signal d’achat</li>
@@ -162,7 +187,16 @@ const Analysis = () => {
 
       {/* Commentaire IA */}
       {commentary && (
-        <p style={{ marginTop: "1rem", color: "#aaa" }}>{commentary}</p>
+        <p style={{
+          marginTop: "1rem",
+          color: "#aaa",
+          backgroundColor: "rgba(0,0,0,0.5)",
+          padding: "1rem",
+          borderRadius: "8px",
+          backdropFilter: "blur(8px)"
+        }}>
+          {commentary}
+        </p>
       )}
     </div>
   );
