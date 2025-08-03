@@ -1,6 +1,5 @@
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useContext, useEffect, useState } from "react";
-const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { Link } from "react-router-dom";
 import { PortfolioContext } from "../context/PortfolioContext";
 import { IATraderContext } from "../context/IATraderContext";
