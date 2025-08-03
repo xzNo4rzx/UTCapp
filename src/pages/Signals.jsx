@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { fetchLatestSignals } from "../utils/firestoreSignals"; // 🔁 Firestore : signaux IA
+import { fetchLatestSignals } from "../utils/firestoreSignals"; // 🔁 Firestore
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 
-// 🧠 Composant principal
+// ████████ 🧠 COMPOSANT PRINCIPAL ████████
 const Signals = () => {
   const [signals, setSignals] = useState([]);
   const [logs, setLogs] = useState([]);
 
-  // 🎯 Formateur de score
+  // 🎯 Formateur de nombre
   const fmt = (v) => Number(v || 0).toFixed(2);
 
-  // 🎨 Couleur type de signal
+  // 🎨 Couleur par type de signal
   const getColor = (type) => {
     if (type === "BUY") return "#0f0";
     if (type === "SELL") return "#f00";
@@ -18,7 +18,7 @@ const Signals = () => {
     return "#aaa";
   };
 
-  // 🎨 Couleur du risque
+  // 🎨 Couleur par niveau de risque
   const getRiskColor = (risk = "") => {
     if (risk.includes("Faible")) return "lightgreen";
     if (risk.includes("Moyen")) return "orange";
@@ -26,7 +26,7 @@ const Signals = () => {
     return "#ccc";
   };
 
-  // 🔁 Récupération des logs serveur (via API)
+  // 🔁 Lecture logs serveur API
   const fetchLogLines = async () => {
     try {
       const res = await fetch("https://ai-signal-api.onrender.com/signals-log");
@@ -35,22 +35,28 @@ const Signals = () => {
       setLogs(lines);
     } catch (err) {
       console.error("❌ Erreur chargement logs:", err);
-      setLogs(prev => [...prev, "❌ Erreur lecture logs serveur."]);
+      setLogs((prev) => [...prev, "❌ Erreur lecture logs serveur."]);
     }
   };
 
-  // 🔁 Récupération des signaux IA depuis Firestore
+  // 🔁 Lecture signaux Firestore
   const loadSignals = async () => {
     try {
-      const data = await fetchLatestSignals(); // ⚠️ firestoreSignals.js
-      const sorted = [...data].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const data = await fetchLatestSignals(); // 🔥 Firebase Firestore
+      if (!Array.isArray(data)) throw new Error("Données invalides");
+      const sorted = [...data].sort((a, b) => {
+        const ta = new Date(a.timestamp || 0);
+        const tb = new Date(b.timestamp || 0);
+        return tb - ta;
+      });
       setSignals(sorted);
     } catch (err) {
-      console.error("❌ Erreur chargement signaux :", err);
+      console.error("❌ Erreur chargement Firestore :", err);
+      setSignals([]); // Fallback vide
     }
   };
 
-  // 🔁 Initialisation + intervalle de refresh
+  // 🚀 Initialisation
   useEffect(() => {
     loadSignals();
     fetchLogLines();
@@ -61,7 +67,7 @@ const Signals = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // 🖼️ Rendu
+  // ████████ RENDU VISUEL ████████
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
@@ -74,7 +80,7 @@ const Signals = () => {
       fontFamily: "sans-serif"
     }}>
 
-      {/* 🔒 BARRE FIXE TITRE */}
+      {/* 🧱 BARRE TITRE */}
       <div style={{
         position: "sticky",
         top: 0,
@@ -88,7 +94,7 @@ const Signals = () => {
         <h1>🚨 Signaux IA</h1>
       </div>
 
-      {/* 🧾 CONSOLE DE LOGS */}
+      {/* 🧾 LOGS CONSOLE */}
       <div style={{
         backgroundColor: "rgba(0,0,0,0.5)",
         borderRadius: "6px",
@@ -109,7 +115,7 @@ const Signals = () => {
         )}
       </div>
 
-      {/* 🔍 SIGNALS ENCADRÉS */}
+      {/* 📊 BLOC SIGNAUX */}
       <div style={{
         backgroundColor: "rgba(0,0,0,0.5)",
         padding: "1rem",
@@ -134,18 +140,16 @@ const Signals = () => {
                   boxSizing: "border-box",
                 }}
               >
-                {/* 🔷 En-tête signal */}
+                {/* 🧠 HEADER */}
                 <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
                   <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>{s.crypto || "—"}</div>
-                  <div style={{ color: "#ccc", fontSize: "1rem" }}>
-                    🧠 {s.type_ia || s.type || "inconnu"}
-                  </div>
+                  <div style={{ color: "#ccc", fontSize: "1rem" }}>🧠 {s.type_ia || s.type || "inconnu"}</div>
                   <div style={{ color: getRiskColor(s.risk), fontSize: "1rem" }}>
                     Risque : {s.risk || "—"}
                   </div>
                 </div>
 
-                {/* 🔍 Score et date */}
+                {/* 📊 SCORE */}
                 <div style={{ fontSize: "0.9rem", color: "#aaa", marginTop: "0.3rem" }}>
                   📊 Score IA : {fmt(s.score)} / 5
                   {s.score20 !== undefined && ` | Score global : ${fmt(s.score20)} / 20`}
@@ -153,16 +157,22 @@ const Signals = () => {
                   🕒 {new Date(s.timestamp).toLocaleString()}
                 </div>
 
-                {/* 📝 Explication détaillée */}
+                {/* 📋 EXPLICATIONS */}
                 {Array.isArray(s.explanation) && (
-                  <ul style={{ marginTop: "0.5rem", color: "#ddd", fontSize: "0.95rem", lineHeight: "1.4", paddingLeft: "1.2rem" }}>
+                  <ul style={{
+                    marginTop: "0.5rem",
+                    color: "#ddd",
+                    fontSize: "0.95rem",
+                    lineHeight: "1.4",
+                    paddingLeft: "1.2rem"
+                  }}>
                     {s.explanation.map((line, j) => (
                       <li key={j}>{line}</li>
                     ))}
                   </ul>
                 )}
 
-                {/* 🔗 Lien TradingView */}
+                {/* 🔗 TRADINGVIEW */}
                 <div style={{ marginTop: "0.5rem" }}>
                   <a
                     href={`https://www.tradingview.com/symbols/${s.crypto?.replace("/", "")}USD`}
