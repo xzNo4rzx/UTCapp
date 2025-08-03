@@ -1,4 +1,4 @@
-const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useContext, useEffect, useState } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { Link } from "react-router-dom";
