@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useContext, useState, useEffect } from "react";
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { IATraderContext } from "../context/IATraderContext";
 import LogViewer from "../components/LogViewer";
 
@@ -26,7 +28,7 @@ const IATrader = () => {
     <div style={{
       padding: "6rem 2rem 2rem",
       backgroundImage: 'url("/backgrounds/iatraderbackground.png")',
-      backgroundSize: '100% auto',
+      backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: 'fixed',
       color: "#fff",

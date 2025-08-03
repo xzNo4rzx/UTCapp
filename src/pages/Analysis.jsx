@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useEffect, useState, useMemo } from "react";
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import axios from "axios";
 import { Line } from "react-chartjs-2";
 import {
@@ -128,7 +130,7 @@ const Analysis = () => {
       backgroundImage: 'url("/backgrounds/homebackground.png")',
       backgroundSize: "cover",
       backgroundPosition: "center",
-      backgroundAttachment: "fixed",
+      backgroundAttachment: isDesktop ? "fixed" : "scroll",
       color: "#eee",
       fontFamily: "sans-serif",
       minHeight: "100vh"

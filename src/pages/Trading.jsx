@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useContext, useEffect, useMemo, useState } from "react";
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import fetchPrices from "../utils/fetchPrices";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
@@ -180,7 +182,7 @@ const Trading = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: '100% auto',
+      backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: 'fixed',
       padding: "6rem 2rem 2rem",

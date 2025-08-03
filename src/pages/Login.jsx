@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 // src/pages/Login.jsx
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useState } from "react";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -36,7 +38,7 @@ const Login = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: '100% auto',
+      backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: 'fixed',
       minHeight: "100vh",

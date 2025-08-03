@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 // src/pages/Register.jsx
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
@@ -36,7 +38,7 @@ const Register = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: '100% auto',
+      backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: 'fixed',
       minHeight: "100vh",

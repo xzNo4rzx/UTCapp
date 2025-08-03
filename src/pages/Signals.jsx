@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useEffect, useState } from "react";
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import fetchSignals from "../utils/fetchSignals";
 
 const Signals = () => {
@@ -57,7 +59,7 @@ const Signals = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: '100% auto',
+      backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: 'fixed',
       padding: "6rem 2rem 2rem",

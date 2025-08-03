@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useContext, useEffect, useState } from "react";
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import axios from "axios";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
@@ -59,7 +61,7 @@ const Profile = () => {
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: '100% auto',
+      backgroundSize: "cover",
       backgroundAttachment: 'fixed',
       backgroundPosition: "center",
       minHeight: "100vh",

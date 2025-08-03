@@ -1,4 +1,6 @@
+const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useContext, useEffect, useState } from "react";
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { Link } from "react-router-dom";
 import { PortfolioContext } from "../context/PortfolioContext";
 import { IATraderContext } from "../context/IATraderContext";
@@ -125,7 +127,7 @@ const Home = () => {
 const pageStyle = {
   padding: "6rem 2rem 2rem",
   backgroundImage: 'url("/backgrounds/homebackground.png")',
-  backgroundSize: '100% auto',
+  backgroundSize: "cover",
   backgroundPosition: "center",
   backgroundAttachment: 'fixed',
   minHeight: "100vh",
