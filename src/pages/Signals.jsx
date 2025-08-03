@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from "react";
+import { fetchLatestSignals } from "../utils/firestoreSignals"; // 🔁 Firestore : signaux IA
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
-import fetchSignals from "../utils/fetchSignals";
 
+// 🧠 Composant principal
 const Signals = () => {
   const [signals, setSignals] = useState([]);
   const [logs, setLogs] = useState([]);
 
+  // 🎯 Formateur de score
   const fmt = (v) => Number(v || 0).toFixed(2);
 
+  // 🎨 Couleur type de signal
   const getColor = (type) => {
     if (type === "BUY") return "#0f0";
     if (type === "SELL") return "#f00";
@@ -15,6 +18,7 @@ const Signals = () => {
     return "#aaa";
   };
 
+  // 🎨 Couleur du risque
   const getRiskColor = (risk = "") => {
     if (risk.includes("Faible")) return "lightgreen";
     if (risk.includes("Moyen")) return "orange";
@@ -22,6 +26,7 @@ const Signals = () => {
     return "#ccc";
   };
 
+  // 🔁 Récupération des logs serveur (via API)
   const fetchLogLines = async () => {
     try {
       const res = await fetch("https://ai-signal-api.onrender.com/signals-log");
@@ -34,42 +39,45 @@ const Signals = () => {
     }
   };
 
+  // 🔁 Récupération des signaux IA depuis Firestore
   const loadSignals = async () => {
     try {
-      const data = await fetchSignals();
-      const raw = Array.isArray(data?.signals) ? data.signals : data;
-      const sorted = [...raw].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const data = await fetchLatestSignals(); // ⚠️ firestoreSignals.js
+      const sorted = [...data].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       setSignals(sorted);
     } catch (err) {
       console.error("❌ Erreur chargement signaux :", err);
     }
   };
 
+  // 🔁 Initialisation + intervalle de refresh
   useEffect(() => {
     loadSignals();
     fetchLogLines();
     const timer = setInterval(() => {
-      fetchLogLines();
       loadSignals();
+      fetchLogLines();
     }, 30000);
     return () => clearInterval(timer);
   }, []);
 
+  // 🖼️ Rendu
   return (
     <div style={{
       backgroundImage: 'url("/backgrounds/homebackground.png")',
       backgroundSize: "cover",
       backgroundPosition: "center",
-      backgroundAttachment: 'fixed',
+      backgroundAttachment: isDesktop ? "fixed" : "scroll",
       padding: "6rem 2rem 2rem",
       minHeight: "100vh",
       color: "#fff",
       fontFamily: "sans-serif"
     }}>
+
       {/* 🔒 BARRE FIXE TITRE */}
       <div style={{
         position: "sticky",
-        top: "0",
+        top: 0,
         zIndex: 100,
         backgroundColor: "rgba(0,0,0,0.6)",
         backdropFilter: "blur(8px)",
