@@ -1,5 +1,5 @@
 // 🔥 src/utils/firestoreSignals.js
-import { db } from "./firebase";
+import { db } from "../firebase"; 
 import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 
 // 📥 Récupère les signaux Firestore (max = 30 par défaut)
