@@ -28,16 +28,15 @@ const Signals = () => {
 
   // 🔁 Lecture logs serveur API
   const fetchLogLines = async () => {
-    try {
-      const res = await fetch("https://ai-signal-api.onrender.com/signals-log");
-      const text = await res.text();
-      const lines = text.split("\n").filter(Boolean).slice(-25).reverse();
-      setLogs(lines);
-    } catch (err) {
-      console.error("❌ Erreur chargement logs:", err);
-      setLogs((prev) => [...prev, "❌ Erreur lecture logs serveur."]);
-    }
-  };
+  try {
+    const res = await fetch("https://ai-signal-api.onrender.com/signals-log");
+    const lines = await res.json();
+    setLogs(lines.slice(-25).reverse());
+  } catch (err) {
+    console.error("❌ Erreur chargement logs:", err);
+    setLogs(prev => [...prev, "❌ Erreur lecture logs serveur."]);
+  }
+};
 
   // 🔁 Lecture signaux Firestore
   const loadSignals = async () => {
