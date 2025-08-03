@@ -23,13 +23,13 @@ const Signals = () => {
 
   const fetchLogLines = async () => {
     try {
-      const res = await fetch("https://utc-api.onrender.com/signals-log");
+      const res = await fetch("https://ai-signal-api.onrender.com/signals-log");
       const text = await res.text();
-      const lines = text.split("\n").filter(Boolean).slice(-25);
-      setLogs(lines.reverse());
+      const lines = text.split("\n").filter(Boolean).slice(-25).reverse();
+      setLogs(lines);
     } catch (err) {
-      console.error("Erreur chargement log :", err);
-      setLogs(prev => [...prev, "❌ Erreur lecture logs."]);
+      console.error("❌ Erreur chargement logs:", err);
+      setLogs(prev => [...prev, "❌ Erreur lecture logs serveur."]);
     }
   };
 
@@ -40,7 +40,7 @@ const Signals = () => {
       const sorted = [...raw].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       setSignals(sorted);
     } catch (err) {
-      console.error("Erreur chargement signaux :", err);
+      console.error("❌ Erreur chargement signaux :", err);
     }
   };
 
@@ -50,7 +50,7 @@ const Signals = () => {
     const timer = setInterval(() => {
       fetchLogLines();
       loadSignals();
-    }, 30_000);
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
