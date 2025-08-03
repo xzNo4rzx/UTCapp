@@ -1,4 +1,3 @@
-const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 // src/pages/Trading.jsx
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useEffect, useState, useMemo, useContext } from "react";

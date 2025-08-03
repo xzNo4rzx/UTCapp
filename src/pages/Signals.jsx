@@ -1,4 +1,3 @@
-const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useEffect, useState } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import fetchSignals from "../utils/fetchSignals";

@@ -1,4 +1,4 @@
-const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
+const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useContext, useEffect, useMemo, useState } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import fetchPrices from "../utils/fetchPrices";

@@ -1,4 +1,3 @@
-const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useContext, useEffect, useState } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import axios from "axios";

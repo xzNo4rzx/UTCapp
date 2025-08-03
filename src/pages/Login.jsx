@@ -1,4 +1,3 @@
-const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 // src/pages/Login.jsx
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useState } from "react";

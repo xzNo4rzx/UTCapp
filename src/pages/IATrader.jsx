@@ -1,4 +1,3 @@
-const isDesktop = typeof window !== "undefined"  window.innerWidth >= 768;
 import React, { useContext, useState, useEffect } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { IATraderContext } from "../context/IATraderContext";
