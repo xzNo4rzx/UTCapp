@@ -14,6 +14,9 @@ import PrivateRoute from "./components/PrivateRoute.jsx";
 import Admin from "./pages/Admin.jsx";
 
 const App = () => {
+  useEffect(() => {
+    console.log("✅ UTC App initialisée avec routes.");
+  }, []);
   console.log("✅ App.jsx chargé");
 
   return (

@@ -1,10 +1,7 @@
 import React, { useContext, useState, useEffect } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { IATraderContext } from "../context/IATraderContext";
-const [sellModal, setSellModal] = useState(false);
-const [sellSymbol, setSellSymbol] = useState("");
-const [sellPrice, setSellPrice] = useState(0);
-const [sellPercent, setSellPercent] = useState(100);
+import SellModalIA from "../components/SellModalIA";
 
 const IATrader = () => {
   const {
@@ -20,12 +17,16 @@ const IATrader = () => {
   const [logVisible, setLogVisible] = useState(true);
   const [logs, setLogs] = useState([]);
 
+  const [sellModal, setSellModal] = useState(false);
+  const [sellSymbol, setSellSymbol] = useState("");
+  const [sellPrice, setSellPrice] = useState(0);
+  const [sellPercent, setSellPercent] = useState(100);
+
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem("ia-pt-history") || "[]");
     setPtHistory(stored);
   }, []);
 
-  // 🔁 Récupération logs IA Trader (toutes les 15s)
   useEffect(() => {
     const fetchLogs = async () => {
       try {
@@ -73,7 +74,6 @@ const IATrader = () => {
       }}>
         <h1>🤖 IA Trader</h1>
 
-        {/* 🔁 Console de Logs IA */}
         <div style={{ marginBottom: "1rem" }}>
           <button
             onClick={() => setLogVisible(!logVisible)}
@@ -108,7 +108,6 @@ const IATrader = () => {
           )}
         </div>
 
-        {/* 🔘 Actions utilisateur */}
         <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
           <h2 style={{ color: "#aaa" }}>
             {iaName} | 🕒 Début du PT : {startDate.toLocaleString()}
@@ -130,19 +129,9 @@ const IATrader = () => {
             🧨 RESET IA TRADER TO 10000$
           </button>
         </div>
-
-        <style>{`
-          @keyframes shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-2px); }
-            50% { transform: translateX(2px); }
-            75% { transform: translateX(-2px); }
-            100% { transform: translateX(0); }
-          }
-        `}</style>
       </div>
 
-      {/* ███ Bilan financier */}
+      {/* 📊 Bilan */}
       <section style={{
         backgroundColor: "rgba(30,30,30,0.6)",
         backdropFilter: "blur(8px)",
@@ -168,7 +157,7 @@ const IATrader = () => {
         </div>
       </section>
 
-      {/* 📌 Positions en cours */}
+      {/* 📌 Positions */}
       <section style={{ marginBottom: "2rem" }}>
         <h3>📌 Positions en cours</h3>
         {iaPositions.length === 0 ? (
@@ -209,7 +198,7 @@ const IATrader = () => {
         )}
       </section>
 
-      {/* 🕓 Historique complet IA */}
+      {/* Historique */}
       <section style={{ marginBottom: "2rem" }}>
         <h3>🕓 Historique</h3>
         {iaHistory.length === 0 ? (
@@ -244,7 +233,7 @@ const IATrader = () => {
         )}
       </section>
 
-      {/* 🧠 Archives des anciens traders */}
+      {/* 🧠 Archives anciens traders */}
       <section>
         <h3>📚 Historique des anciens IA Trader</h3>
         {ptHistory.length === 0 ? (
@@ -281,16 +270,18 @@ const IATrader = () => {
           </>
         )}
       </section>
+
+      {/* 🧾 Modale de vente IA (si activée plus tard) */}
       <SellModalIA
-  show={sellModal}
-  symbol={sellSymbol}
-  price={sellPrice}
-  percent={sellPercent}
-  onChangePercent={(e) => setSellPercent(Number(e.target.value))}
-  onSetMax={() => setSellPercent(100)}
-  onClose={() => setSellModal(false)}
-  onConfirm={confirmSell}
-/>
+        show={sellModal}
+        symbol={sellSymbol}
+        price={sellPrice}
+        percent={sellPercent}
+        onChangePercent={(e) => setSellPercent(Number(e.target.value))}
+        onSetMax={() => setSellPercent(100)}
+        onClose={() => setSellModal(false)}
+        onConfirm={() => {}} // tu peux brancher ici une future logique
+      />
     </div>
   );
 };
