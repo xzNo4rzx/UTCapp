@@ -1,0 +1,9 @@
+# ⚙️ MODE TERMINAL ONLY — UTC PROJECT
+# Dernière mise à jour : 2025-08-05 12:55
+
+- Ce projet est désormais en MODE TERMINAL UNIQUEMENT par défaut.
+- Toutes les interventions se font par commandes shell (sed, git, etc).
+- Pas de description inutile, pas de détails ligne par ligne, sauf demande explicite.
+- Push systématique après chaque patch appliqué.
+- Si tu veux repasser en mode explicatif ➜ dis : "mode pas à pas".
+

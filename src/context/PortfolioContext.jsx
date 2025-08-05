@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { createContext, useState, useEffect } from "react";
+import { createContext } from "react";
 import axios from "axios";
 import fetchSignals from "../utils/fetchSignals";
 import { useAuth } from "./AuthContext";
