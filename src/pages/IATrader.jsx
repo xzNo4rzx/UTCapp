@@ -1,7 +1,10 @@
 import React, { useContext, useState, useEffect } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { IATraderContext } from "../context/IATraderContext";
-import LogViewer from "../components/LogViewer";
+const [sellModal, setSellModal] = useState(false);
+const [sellSymbol, setSellSymbol] = useState("");
+const [sellPrice, setSellPrice] = useState(0);
+const [sellPercent, setSellPercent] = useState(100);
 
 const IATrader = () => {
   const {
@@ -10,11 +13,34 @@ const IATrader = () => {
     updateIaPrices, resetIATrader,
   } = useContext(IATraderContext);
 
+  // ████████████████████████████████
+  // 🧠 Logique d'état local
   const [startDate] = useState(() => new Date(iaStart));
   const [ptHistory, setPtHistory] = useState([]);
+  const [logVisible, setLogVisible] = useState(true);
+  const [logs, setLogs] = useState([]);
+
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem("ia-pt-history") || "[]");
     setPtHistory(stored);
+  }, []);
+
+  // 🔁 Récupération logs IA Trader (toutes les 15s)
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch("https://ai-signal-api.onrender.com/trader-log");
+        const text = await res.text();
+        const lines = text.split("\n").filter(Boolean).slice(-50).reverse();
+        setLogs(lines);
+      } catch (e) {
+        setLogs(["❌ Erreur lors du chargement des logs du Trader."]);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   const fmt = (n) => Number(n).toFixed(2);
@@ -34,7 +60,7 @@ const IATrader = () => {
       fontFamily: "sans-serif",
       minHeight: "100vh"
     }}>
-      {/* Sticky Bloc Titre + Log + Boutons */}
+      {/* ███ Bloc Sticky Titre / Logs / Actions */}
       <div style={{
         position: "sticky",
         top: "5rem",
@@ -46,7 +72,43 @@ const IATrader = () => {
         marginBottom: "2rem"
       }}>
         <h1>🤖 IA Trader</h1>
-        <LogViewer />
+
+        {/* 🔁 Console de Logs IA */}
+        <div style={{ marginBottom: "1rem" }}>
+          <button
+            onClick={() => setLogVisible(!logVisible)}
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "#4ea8de",
+              color: "#fff",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer"
+            }}
+          >
+            {logVisible ? "🧹 Masquer Console IA" : "📋 Afficher Console IA"}
+          </button>
+
+          {logVisible && (
+            <div style={{
+              marginTop: "1rem",
+              backgroundColor: "rgba(0,0,0,0.6)",
+              borderRadius: "6px",
+              padding: "1rem",
+              fontFamily: "monospace",
+              fontSize: "0.85rem",
+              maxHeight: "240px",
+              overflowY: "scroll",
+              boxShadow: "inset 0 0 4px #000"
+            }}>
+              {logs.map((line, idx) => (
+                <div key={idx} style={{ color: "#ccc", marginBottom: "2px" }}>{line}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 🔘 Actions utilisateur */}
         <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
           <h2 style={{ color: "#aaa" }}>
             {iaName} | 🕒 Début du PT : {startDate.toLocaleString()}
@@ -68,6 +130,7 @@ const IATrader = () => {
             🧨 RESET IA TRADER TO 10000$
           </button>
         </div>
+
         <style>{`
           @keyframes shake {
             0% { transform: translateX(0); }
@@ -79,7 +142,7 @@ const IATrader = () => {
         `}</style>
       </div>
 
-      {/* Bilan */}
+      {/* ███ Bilan financier */}
       <section style={{
         backgroundColor: "rgba(30,30,30,0.6)",
         backdropFilter: "blur(8px)",
@@ -105,7 +168,7 @@ const IATrader = () => {
         </div>
       </section>
 
-      {/* Positions ouvertes */}
+      {/* 📌 Positions en cours */}
       <section style={{ marginBottom: "2rem" }}>
         <h3>📌 Positions en cours</h3>
         {iaPositions.length === 0 ? (
@@ -146,7 +209,7 @@ const IATrader = () => {
         )}
       </section>
 
-      {/* Historique IA */}
+      {/* 🕓 Historique complet IA */}
       <section style={{ marginBottom: "2rem" }}>
         <h3>🕓 Historique</h3>
         {iaHistory.length === 0 ? (
@@ -181,7 +244,7 @@ const IATrader = () => {
         )}
       </section>
 
-      {/* Historique anciens PT */}
+      {/* 🧠 Archives des anciens traders */}
       <section>
         <h3>📚 Historique des anciens IA Trader</h3>
         {ptHistory.length === 0 ? (
@@ -218,6 +281,16 @@ const IATrader = () => {
           </>
         )}
       </section>
+      <SellModalIA
+  show={sellModal}
+  symbol={sellSymbol}
+  price={sellPrice}
+  percent={sellPercent}
+  onChangePercent={(e) => setSellPercent(Number(e.target.value))}
+  onSetMax={() => setSellPercent(100)}
+  onClose={() => setSellModal(false)}
+  onConfirm={confirmSell}
+/>
     </div>
   );
 };

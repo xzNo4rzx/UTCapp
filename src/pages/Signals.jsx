@@ -26,12 +26,16 @@ const Signals = () => {
     return "#ccc";
   };
 
-  // 🔁 Lecture logs serveur API
-  const fetchLogLines = async () => {
+  // 🔁 Lecture logs serveur API (version JSON)
+const fetchLogLines = async () => {
   try {
     const res = await fetch("https://ai-signal-api.onrender.com/signals-log");
-    const lines = await res.json();
-    setLogs(lines.slice(-25).reverse());
+    const json = await res.json();
+    if (Array.isArray(json.log)) {
+      setLogs(json.log.slice(-25).reverse());
+    } else {
+      setLogs(["❌ Format de logs inattendu."]);
+    }
   } catch (err) {
     console.error("❌ Erreur chargement logs:", err);
     setLogs(prev => [...prev, "❌ Erreur lecture logs serveur."]);
