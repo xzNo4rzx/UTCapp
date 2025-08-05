@@ -36,6 +36,8 @@ const Profile = () => {
 
   const fmt = (n) => Number(n).toFixed(2);
 
+  const [showDetails, setShowDetails] = useState(true);
+
   const handleUpdatePrices = () => {
     const btn = document.getElementById("update-btn");
     if (btn) {
@@ -45,6 +47,8 @@ const Profile = () => {
 
     const prevPrices = {};
     positions.forEach(p => { prevPrices[p.symbol] = currentPrices[p.symbol] ?? 0; });
+
+   
 
     updatePrices();
 
@@ -100,34 +104,58 @@ const Profile = () => {
           </button>
         </div>
 
-        <section style={{ marginTop: "1rem" }}>
-          <h3 style={{ marginTop: 0 }}>📊 Bilan</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
-            <div>💼 Solde total : ${fmt(cash + investedAmount)}</div>
-            <div>💰 Cash disponible : ${fmt(cash)}</div>
-            <div>📈 Investi : ${fmt(investedAmount)}</div>
-            <div>📊 Positions ouvertes : {activePositionsCount}</div>
-            <div>🔁 Nombre de trades : {totalTrades}</div>
-            <div>✅ Trades positifs : {positiveTrades} / {totalTrades}</div>
-            <div style={{
-              fontWeight: "bold", fontSize: "1.1rem", padding: "0.5rem 1rem",
-              backgroundColor: "#222", borderRadius: "6px",
-              color: totalProfit >= 0 ? "lightgreen" : "salmon", marginLeft: "auto"
-            }}>
-              📈 Rendement total : ${fmt(totalProfit)} ({fmt(totalProfitPercent)}%)
-            </div>
-            <button
-              id="update-btn"
-              onClick={handleUpdatePrices}
-              style={{
-                padding: "8px 16px", backgroundColor: "#007bff", color: "#fff",
-                border: "none", borderRadius: "4px", cursor: "pointer"
-              }}
-            >
-              🔄 UPDATE PRICES NOW
-            </button>
-          </div>
-        </section>
+<section style={{ marginTop: "1rem" }}>
+  <h3 style={{ marginTop: 0 }}>📊 Bilan</h3>
+  <button
+    onClick={() => setShowDetails(!showDetails)}
+    style={{
+      marginBottom: "1rem",
+      padding: "6px 12px",
+      backgroundColor: "#444",
+      color: "#fff",
+      border: "none",
+      borderRadius: "4px",
+      cursor: "pointer"
+    }}
+  >
+    {showDetails ? "📦 Masquer les détails" : "🔍 Afficher les détails"}
+  </button>
+  <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
+    {showDetails && (<>
+      <div>💼 Solde total : ${fmt(cash + investedAmount)}</div>
+      <div>💰 Cash disponible : ${fmt(cash)}</div>
+      <div>📈 Investi : ${fmt(investedAmount)}</div>
+      <div>📊 Positions ouvertes : {activePositionsCount}</div>
+      <div>🔁 Nombre de trades : {totalTrades}</div>
+      <div>✅ Trades positifs : {positiveTrades} / {totalTrades}</div>
+    </>)}
+    <div style={{
+      fontWeight: "bold",
+      fontSize: "1.1rem",
+      padding: "0.5rem 1rem",
+      backgroundColor: "#222",
+      borderRadius: "6px",
+      color: totalProfit >= 0 ? "lightgreen" : "salmon",
+      marginLeft: "auto"
+    }}>
+      📈 Rendement total : ${fmt(totalProfit)} ({fmt(totalProfitPercent)}%)
+    </div>
+    <button
+      id="update-btn"
+      onClick={handleUpdatePrices}
+      style={{
+        padding: "8px 16px",
+        backgroundColor: "#007bff",
+        color: "#fff",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer"
+      }}
+    >
+      🔄 UPDATE PRICES NOW
+    </button>
+  </div>
+</section>
       </div>
 
       {/* Positions en cours */}
