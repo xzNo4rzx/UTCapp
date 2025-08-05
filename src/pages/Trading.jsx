@@ -18,6 +18,7 @@ const Trading = () => {
   const [sellSymbol, setSellSymbol] = useState("");
   const [sellPrice, setSellPrice] = useState(0);
   const [sellPercent, setSellPercent] = useState(100);
+const [showDetails, setShowDetails] = useState(true);
   const [top5Up, setTop5Up] = useState([]);
   const [top5Down, setTop5Down] = useState([]);
   const [updatedPrices, setUpdatedPrices] = useState({});
@@ -205,16 +206,43 @@ const Trading = () => {
           {portfolioName} | 🕒 Début : {new Date(startDate).toLocaleString()}
         </h2>
         <div style={{ marginTop: "1rem" }}>
-          <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
-          <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
-          <div>📈 Investi : ${investedAmount.toFixed(2)}</div>
-          <div style={{ color: totalProfit >= 0 ? "lightgreen" : "salmon" }}>
-            📊 Rendement total : ${totalProfit.toFixed(2)} ({totalProfitPercent.toFixed(2)}%)
-          </div>
-          <div style={{ marginTop: "1rem" }}>
-            📌 Positions placées : {positionSummary.count} | Valeur actuelle : ${positionSummary.value.toFixed(2)}
-          </div>
-        </div>
+  <button
+    onClick={() => setShowDetails(!showDetails)}
+    style={{
+      marginBottom: "1rem",
+      padding: "6px 12px",
+      backgroundColor: "#444",
+      color: "#fff",
+      border: "none",
+      borderRadius: "4px",
+      cursor: "pointer"
+    }}
+  >
+    {showDetails ? "📦 Masquer les détails" : "🔍 Afficher les détails"}
+  </button>
+  <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
+    {showDetails && (
+      <>
+        <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
+        <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
+        <div>📈 Investi : ${investedAmount.toFixed(2)}</div>
+        <div>📌 Positions placées : {positionSummary.count}</div>
+        <div>💎 Valeur actuelle : ${positionSummary.value.toFixed(2)}</div>
+      </>
+    )}
+    <div style={{
+      fontWeight: "bold",
+      fontSize: "1.1rem",
+      padding: "0.5rem 1rem",
+      backgroundColor: "#222",
+      borderRadius: "6px",
+      color: totalProfit >= 0 ? "lightgreen" : "salmon",
+      marginLeft: "auto"
+    }}>
+      📈 Rendement total : ${totalProfit.toFixed(2)} ({totalProfitPercent.toFixed(2)}%)
+    </div>
+  </div>
+</div>
         <div style={{ marginTop: "1rem" }}>
           <button id="update-btn" onClick={handleUpdatePrices} style={{
             marginRight: "1rem",
