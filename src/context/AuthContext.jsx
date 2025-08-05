@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 // src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
