@@ -1,23 +1,23 @@
-// src/firebase.js
+// FICHIER: ~/Documents/utc-app-full/src/firebase.js
+
+// ==== [BLOC: IMPORTS] =======================================================
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
+// ==== [BLOC: CONFIG] ========================================================
 const firebaseConfig = {
-  apiKey: "AIzaSyA3CAXoBMk5KIb80UgqSY0mNJQISHMfZ9c",
-  authDomain: "no4r-utc-app.firebaseapp.com",
-  projectId: "no4r-utc-app",
-  storageBucket: "no4r-utc-app.appspot.com",
-  messagingSenderId: "139910089353",
-  appId: "1:139910089353:web:dce994c30e4756331b5458",
-  measurementId: "G-VQD24XFCB2",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialisation Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const db = getFirestore(app);
-const auth = getAuth(app);
+// ==== [BLOC: INIT] ==========================================================
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
 
-export { app, analytics, db, auth };
+// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
+// - Nouveau point d'entrée Firebase V9: initialise l'app et exporte `auth`.
+// - Corrige l’erreur "getAuth is not defined" en centralisant l’import/usage.

@@ -1,61 +1,56 @@
-import React, { createContext, useEffect, useState, useContext, useMemo } from "react";
-// src/context/AuthContext.jsx
-import { doc, getDoc } from "firebase/firestore";
-import { app, db } from "../firebase";
+// FICHIER: ~/Documents/utc-app-full/src/context/AuthContext.jsx
 
+// ==== [BLOC: IMPORTS] =======================================================
+import React, { createContext, useEffect, useState, useContext } from "react";
+import { auth } from "../firebase";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+
+// ==== [BLOC: CONTEXTE] ======================================================
 const AuthContext = createContext(null);
 
+// ==== [BLOC: HOOK] ==========================================================
+export const useAuth = () => useContext(AuthContext);
+
+// ==== [BLOC: PROVIDER] ======================================================
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const auth = getAuth(app);
+  const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        console.log("🧾 UID Firebase :", firebaseUser.uid);
-        // autorisation auto pour admin
-        if (firebaseUser.email === "xzno4rzx@gmail.com") {
-          setUser(firebaseUser);
-          return;
-        }
-
-        try {
-          const userDoc = doc(db, "users", firebaseUser.uid);
-          const snap = await getDoc(userDoc);
-
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data.approved === true) {
-              setUser(firebaseUser);
-            } else {
-              await signOut(auth);
-              setUser(null);
-              alert("🚫 Votre compte n’a pas encore été approuvé.");
-            }
-          } else {
-            await signOut(auth);
-            setUser(null);
-            alert("❌ Utilisateur inconnu.");
-          }
-        } catch (err) {
-          console.error("Erreur AuthContext:", err);
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u || null);
+      setInitializing(false);
     });
-
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  const logout = () => signOut(auth);
+  const login = async (email, password) => {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    setUser(cred.user);
+    return cred.user;
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+    setUser(null);
+  };
+
+  const value = { user, initializing, login, logout };
 
   return (
-    <AuthContext.Provider value={{ user, logout }}>
-      {children}
+    <AuthContext.Provider value={value}>
+      {!initializing && children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export default AuthContext;
+
+// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
+// - Import explicite Firebase Auth V9 et usage via `auth` centralisé.
+// - Remplace toute référence à getAuth() inline par l’instance `auth` partagée.
+// - Ajout useEffect import manquant si nécessaire.

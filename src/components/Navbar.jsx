@@ -1,9 +1,12 @@
-// src/components/Navbar.jsx
-import React, { useEffect, useState, useContext } from "react";
+// FICHIER: ~/Documents/utc-app-full/src/components/Navbar.jsx
+
+// ==== [BLOC: IMPORTS] =======================================================
+import React, { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAdmin } from "../context/AdminContext";
 
+// ==== [BLOC: COMPOSANT] =====================================================
 const Navbar = () => {
   const { user, logout } = useAuth();
   const { pendingUsers } = useAdmin();
@@ -32,20 +35,22 @@ const Navbar = () => {
 
   return (
     <>
-      {/* ─── BURGER & TITLE ─────────────────────── */}
-      <div style={{
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: "100%",
-  padding: "1rem 1rem 1rem 1.5rem",
-  display: "flex",
-  alignItems: "center",
-  gap: "1rem",
-  backgroundColor: "rgba(0, 0, 0, 0.4)",
-  backdropFilter: "blur(8px)",
-  zIndex: 1000,
-}}>
+      {/* ==== [BLOC: BARRE SUPÉRIEURE] ===================================== */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          padding: "1rem 1rem 1rem 1.5rem",
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+          backgroundColor: "rgba(0, 0, 0, 0.4)",
+          backdropFilter: "blur(8px)",
+          zIndex: 1000,
+        }}
+      >
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           style={{
@@ -58,17 +63,19 @@ const Navbar = () => {
         >
           ☰
         </button>
-        <h1 style={{
-          color: "#4ea8de",
-          fontFamily: "sans-serif",
-          fontSize: "1.5rem",
-          animation: "slideTitle 2s ease-in-out infinite alternate",
-        }}>
+        <h1
+          style={{
+            color: "#4ea8de",
+            fontFamily: "sans-serif",
+            fontSize: "1.5rem",
+            animation: "slideTitle 2s ease-in-out infinite alternate",
+          }}
+        >
           Ultimate Trading Champions
         </h1>
       </div>
 
-      {/* ─── PANEL LATÉRAL ─────────────────────── */}
+      {/* ==== [BLOC: PANNEAU LATÉRAL] ====================================== */}
       <div
         ref={panelRef}
         style={{
@@ -88,44 +95,66 @@ const Navbar = () => {
           overflow: "hidden",
         }}
       >
-        {/* ✅ OVERLAY TRANSPARENT */}
-        <div style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          backdropFilter: "blur(8px)",
-          zIndex: 0,
-        }} />
+        {/* Overlay */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            backdropFilter: "blur(8px)",
+            zIndex: 0,
+          }}
+        />
 
-        {/* ✅ CONTENU */}
+        {/* Contenu */}
         <div style={{ position: "relative", zIndex: 1 }}>
-          <Link to="/" onClick={handleLinkClick} style={linkStyle}>🏠 Accueil</Link>
+          <Link to="/" onClick={handleLinkClick} style={linkStyle}>
+            🏠 Accueil
+          </Link>
           {user && (
             <>
-              <Link to="/trading" onClick={handleLinkClick} style={linkStyle}>💸 Trading</Link>
-              <Link to="/ia-trader" onClick={handleLinkClick} style={linkStyle}>🤖 IA Trader</Link>
-              <Link to="/analysis" onClick={handleLinkClick} style={linkStyle}>📊 Analyse</Link>
-              <Link to="/signals" onClick={handleLinkClick} style={linkStyle}>🚨 Signaux</Link>
-              <Link to="/profile" onClick={handleLinkClick} style={linkStyle}>👤 Profil</Link>
+              <Link to="/trading" onClick={handleLinkClick} style={linkStyle}>
+                💸 Trading
+              </Link>
+              <Link to="/ia-trader" onClick={handleLinkClick} style={linkStyle}>
+                🤖 IA Trader
+              </Link>
+              <Link to="/analysis" onClick={handleLinkClick} style={linkStyle}>
+                📊 Analyse
+              </Link>
+              <Link to="/signals" onClick={handleLinkClick} style={linkStyle}>
+                🚨 Signaux
+              </Link>
+              <Link to="/profile" onClick={handleLinkClick} style={linkStyle}>
+                👤 Profil
+              </Link>
             </>
           )}
           {user?.email === "xzno4rzx@gmail.com" && (
-            <Link to="/admin" onClick={handleLinkClick} style={{ ...linkStyle, color: "#4ea8de", position: "relative" }}>
+            <Link
+              to="/admin"
+              onClick={handleLinkClick}
+              style={{ ...linkStyle, color: "#4ea8de", position: "relative" }}
+            >
               🛠️ Admin
               {pendingUsers > 0 && (
-                <span style={{
-                  position: "absolute",
-                  top: "8px",
-                  right: "20px",
-                  background: "red",
-                  color: "#fff",
-                  borderRadius: "50%",
-                  padding: "2px 6px",
-                  fontSize: "0.7rem",
-                }}>{pendingUsers}</span>
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "8px",
+                    right: "20px",
+                    background: "red",
+                    color: "#fff",
+                    borderRadius: "50%",
+                    padding: "2px 6px",
+                    fontSize: "0.7rem",
+                  }}
+                >
+                  {pendingUsers}
+                </span>
               )}
             </Link>
           )}
@@ -155,7 +184,7 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* ─── ANIMATION CSS ─────────────────────── */}
+      {/* ==== [BLOC: CSS INLINE] =========================================== */}
       <style>{`
         @keyframes slideTitle {
           0% { transform: translateX(0px); opacity: 0.8; }
@@ -167,3 +196,8 @@ const Navbar = () => {
 };
 
 export default Navbar;
+
+// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
+// - Ajout de useRef à l'import React (corrige "useRef is not defined").
+// - Suppression de useContext importé mais non utilisé.
+// - Blocs d’annotations maintenus pour une édition ciblée.
