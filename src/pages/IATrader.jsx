@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useEffect, useState, useContext } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { IATraderContext } from "../context/IATraderContext";
 import SellModalIA from "../components/SellModalIA";

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 
 const LOG_ENDPOINT = "https://utc-api.onrender.com/trader-log";
 

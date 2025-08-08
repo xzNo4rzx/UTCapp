@@ -1,6 +1,6 @@
 // src/pages/Trading.jsx
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
-import React, { useEffect, useState, useMemo, useContext } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import fetchPrices from "../utils/fetchPrices";
 import { PortfolioContext } from "../context/PortfolioContext";
 

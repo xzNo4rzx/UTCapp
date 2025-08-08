@@ -1,5 +1,5 @@
 // src/components/PrivateRoute.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebase";

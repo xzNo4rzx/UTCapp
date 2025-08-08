@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useContext } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import axios from "axios";
 import { Line } from "react-chartjs-2";

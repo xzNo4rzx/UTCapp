@@ -1,5 +1,5 @@
 // src/components/Navbar.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAdmin } from "../context/AdminContext";

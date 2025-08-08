@@ -1,5 +1,5 @@
 // src/App.jsx
-import React from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
 import Home from "./pages/Home.jsx";

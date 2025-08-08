@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { fetchLatestSignals } from "../utils/firestoreSignals"; // 🔁 Firestore
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 
