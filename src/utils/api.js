@@ -1,3 +1,5 @@
+// FICHIER: ~/Documents/utc-app-full/src/utils/api.js
+
 // ==== [CONFIG] ==============================================================
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:8000").replace(/\/+$/, "");
 
@@ -15,7 +17,7 @@ const toJson = async (res) => {
   return res.json();
 };
 
-// ==== [CLIENT] ==============================================================
+// ==== [CLIENT — PRIX & KLINES] ==============================================
 export async function apiGetPrice(symbol) {
   const s = String(symbol || "").toUpperCase();
   return toJson(await fetch(`${API_BASE}/price/${encodeURIComponent(s)}`));
@@ -29,13 +31,19 @@ export async function apiGetKlines(pair = "BTC/USDT", interval = "1m", limit = 1
   const url = `${API_BASE}/klines?symbol=${encodeURIComponent(p)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
   return toJson(await fetch(url));
 }
+
+// ==== [CLIENT — SIGNAUX & LOGS] =============================================
 export async function apiTickSignals() {
   return toJson(await fetch(`${API_BASE}/utcapp/signals`));
 }
 export async function apiLatestSignals(limit = 100) {
   return toJson(await fetch(`${API_BASE}/get-latest-signals?limit=${encodeURIComponent(limit)}`));
 }
+export async function apiGetTraderLog() {
+  return toJson(await fetch(`${API_BASE}/trader-log`));
+}
 
 // ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
-// - API_BASE fixe sur l’URL backend Render.
-// - Garde-fou JSON pour éviter l’erreur "Unexpected token '<'".
+// - Ajout apiGetTraderLog() -> /trader-log
+// - Remplacement /get-latest-signals par /get-latest-signals via apiLatestSignals()
+// - Tout passe par VITE_API_BASE (https://utc-api.onrender.com)

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from "react";
 
-const LOG_ENDPOINT = "https://utc-api.onrender.com/trader-log";
+const LOG_ENDPOINT = ((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(//+$/,"")) + "/trader-log";
 
 const LogViewer = () => {
   const [logs, setLogs] = useState([]);
