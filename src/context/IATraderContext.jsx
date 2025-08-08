@@ -1,133 +1,110 @@
-// FICHIER: ~/Documents/utc-app-full/src/context/PortfolioContext.jsx
+// FICHIER: ~/Documents/utc-app-full/src/context/IATraderContext.jsx
 
 // ==== [BLOC: IMPORTS] =======================================================
-import React, { createContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useEffect, useState, useMemo, useContext } from "react";
 import { useAuth } from "./AuthContext";
-import { loadPortfolio, savePortfolio } from "../utils/firestorePortfolio";
-import { apiGetPrice, apiGetPrices } from "../utils/api";
+import { loadIATrader, saveIATrader } from "../utils/firestoreIATrader";
+import {
+  apiGetPrice,
+  apiGetPrices,
+  apiGetKlines,
+  apiTickSignals,
+  apiLatestSignals,
+} from "../utils/api";
 
 // ==== [BLOC: CONTEXTE] ======================================================
-export const PortfolioContext = createContext();
+export const IATraderContext = createContext();
 
-// ==== [BLOC: CONSTANTES GLOBALES] ===========================================
-const START_CASH = 10000;
+// ==== [BLOC: CONSTANTES] ====================================================
+const DEFAULT_RULES = Object.freeze({
+  buyFraction: 1 / 3,     // investit 1/3 du cash par BUY
+  takeProfit: 0.03,       // TP 3%
+  stopLoss: 0.05,         // SL 5%
+  checkIntervalSec: 60,   // tick loop
+  minScore: {
+    conservateur: 16,
+    equilibre: 12,
+    aggressif: 8,
+  },
+});
 
-// Liste de suivi par défaut
-const DEFAULT_SYMBOLS = [
-  "BTC","ETH","SOL","XRP","ADA","DOGE","SHIB","AVAX","TRX",
-  "DOT","MATIC","LTC","BCH","UNI","LINK","XLM","ATOM","ETC",
-  "FIL","APT","ARB","OP","NEAR","SUI","INJ","TWT","RUNE",
-  "PEPE","GMT","LDO","RNDR","FTM","EGLD","FLOW","GRT","IMX",
-  "STX","ENS","CRV","HBAR","CRO"
-];
+// ==== [BLOC: HELPERS] =======================================================
+const nowIso = () => new Date().toISOString();
+const round2 = (n) => Math.round(n * 100) / 100;
+const ensureNumber = (v, fb = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
 
-// ==== [BLOC: HELPERS - BACKEND BINANCE PROXY] ===============================
+// ==== [BLOC: BACKEND PRICES HELPERS] =======================================
 const fetchBackendPrice = async (symbol) => {
-  const sym = String(symbol || "").toUpperCase();
-  const { price } = await apiGetPrice(sym);
+  const s = String(symbol || "").toUpperCase();
+  const { price } = await apiGetPrice(s);
   const p = Number(price);
   return Number.isFinite(p) ? p : NaN;
 };
 
 const fetchBackendPricesMap = async (symbols) => {
   if (!symbols || symbols.length === 0) return {};
-  const uniq = Array.from(new Set(symbols.map((s) => (s || "").toUpperCase())));
+  const uniq = Array.from(new Set(symbols.map((x) => String(x || "").toUpperCase())));
   const { prices: mp = {} } = await apiGetPrices(uniq);
   const out = {};
   for (const s of uniq) {
-    const v = Number(mp?.[s]);
+    // accepte clés "BTC" ou "BTCUSDT"
+    const v = Number(mp?.[s] ?? mp?.[`${s}USDT`]);
     if (Number.isFinite(v)) out[s] = v;
   }
   return out;
 };
 
-// ==== [BLOC: HELPERS - UTILS] ===============================================
-const nowIso = () => new Date().toISOString();
-const ms = (min) => min * 60 * 1000;
-const round2 = (n) => Math.round(n * 100) / 100;
-const ensureNum = (v, fb = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
-
 // ==== [BLOC: PROVIDER] ======================================================
-export const PortfolioProvider = ({ children }) => {
+export const IATraderProvider = ({ children }) => {
   const { user } = useAuth();
 
-  // ---- États persistés (localStorage + Firestore) ---------------------------
-  const [portfolioName, setPortfolioName] = useState(() => {
-    const d = new Date();
-    const tag = `PT${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const n = Number(localStorage.getItem("ptCounter") || "1");
-    const name = `${tag}-${String(n).padStart(3, "0")}`;
-    if (!localStorage.getItem("portfolioName")) {
-      localStorage.setItem("portfolioName", name);
-      localStorage.setItem("ptCounter", String(n + 1));
-    }
-    return localStorage.getItem("portfolioName") || name;
-  });
-
-  const [cash, setCash] = useState(() => {
-    const v = Number(localStorage.getItem("pt_cash"));
-    return Number.isFinite(v) && v >= 0 ? v : START_CASH;
-  });
-
-  const [positions, setPositions] = useState(() => {
-    try {
-      const raw = localStorage.getItem("pt_positions");
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [history, setHistory] = useState(() => {
-    try {
-      const raw = localStorage.getItem("pt_history");
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [watchlist, setWatchlist] = useState(() => {
-    try {
-      const raw = localStorage.getItem("pt_watchlist");
-      const list = raw ? JSON.parse(raw) : DEFAULT_SYMBOLS;
-      return Array.isArray(list) && list.length ? list : DEFAULT_SYMBOLS;
-    } catch {
-      return DEFAULT_SYMBOLS;
-    }
-  });
-
-  // ---- États non persistés --------------------------------------------------
+  // ---- [BLOC: STATES] ------------------------------------------------------
+  const [iaName] = useState("IA Trader");
+  const [iaStart, setIaStart] = useState(() => nowIso());
+  const [iaCash, setIaCash] = useState(10000);
+  const [iaPositions, setIaPositions] = useState([]); // {id,symbol,qty,buyPrice,buyAt,tp,sl}
+  const [iaHistory, setIaHistory] = useState([]);     // {id,type:'BUY'|'SELL',symbol,qty,price,at,pnlUSD?,pnlPct?}
   const [currentPrices, setCurrentPrices] = useState({}); // {SYM: price}
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [riskMode, setRiskMode] = useState("equilibre"); // 'conservateur'|'equilibre'|'aggressif'
+  const [lastTickAt, setLastTickAt] = useState(null);
+  const [log, setLog] = useState([]);
+  const [tickSec, setTickSec] = useState(DEFAULT_RULES.checkIntervalSec);
 
-  // snapshot de référence pour variations 5 minutes
-  const [refSnapshot, setRefSnapshot] = useState({
-    ts: Date.now(),
-    prices: {}, // {SYM: price}
-  });
+  // ---- [BLOC: MEMOS] -------------------------------------------------------
+  const investedValue = useMemo(() => {
+    return iaPositions.reduce((acc, p) => {
+      const sym = (p.symbol || "").toUpperCase();
+      const price = ensureNumber(currentPrices[sym], p.buyPrice);
+      return acc + ensureNumber(p.qty, 0) * price;
+    }, 0);
+  }, [iaPositions, currentPrices]);
 
-  // ---- Persistences locales -------------------------------------------------
-  useEffect(() => localStorage.setItem("pt_cash", String(cash)), [cash]);
-  useEffect(() => localStorage.setItem("pt_positions", JSON.stringify(positions)), [positions]);
-  useEffect(() => localStorage.setItem("pt_history", JSON.stringify(history)), [history]);
-  useEffect(() => localStorage.setItem("pt_watchlist", JSON.stringify(watchlist)), [watchlist]);
+  const totalValue = useMemo(() => round2(iaCash + investedValue), [iaCash, investedValue]);
 
-  // ---- Firestore sync (best-effort) ----------------------------------------
+  // ---- [BLOC: LOG] ---------------------------------------------------------
+  const pushLog = (msg) => {
+    setLog((old) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...old].slice(0, 500));
+  };
+
+  // ==== [BLOC: PERSISTENCE FIRESTORE] =======================================
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       if (!user) return;
       try {
-        const data = await loadPortfolio(user.uid);
+        const data = await loadIATrader(user.uid);
         if (data && mounted) {
-          if (data.portfolioName) setPortfolioName(data.portfolioName);
-          if (Number.isFinite(data.cash)) setCash(data.cash);
-          if (Array.isArray(data.positions)) setPositions(data.positions);
-          if (Array.isArray(data.history)) setHistory(data.history);
-          if (Array.isArray(data.watchlist) && data.watchlist.length) setWatchlist(data.watchlist);
+          setIaStart(data.iaStart || nowIso());
+          setIaCash(ensureNumber(data.iaCash, 10000));
+          setIaPositions(Array.isArray(data.iaPositions) ? data.iaPositions : []);
+          setIaHistory(Array.isArray(data.iaHistory) ? data.iaHistory : []);
+          setRiskMode(data.riskMode || "equilibre");
+          pushLog("Données IA Trader chargées depuis Firestore.");
         }
-      } catch {/* silencieux */}
+      } catch {
+        pushLog("⚠️ Échec chargement Firestore (IA Trader).");
+      }
     };
     load();
     return () => (mounted = false);
@@ -137,294 +114,289 @@ export const PortfolioProvider = ({ children }) => {
     const save = async () => {
       if (!user) return;
       try {
-        await savePortfolio(user.uid, {
-          portfolioName,
-          cash,
-          positions,
-          history,
-          watchlist,
-          lastUpdated,
+        await saveIATrader(user.uid, {
+          iaName,
+          iaStart,
+          iaCash,
+          iaPositions,
+          iaHistory,
+          riskMode,
+          lastTickAt,
         });
-      } catch {/* silencieux */}
+      } catch {
+        // silencieux
+      }
     };
     save();
-  }, [user, portfolioName, cash, positions, history, watchlist, lastUpdated]);
+  }, [user, iaName, iaStart, iaCash, iaPositions, iaHistory, riskMode, lastTickAt]);
 
-  // ==== [BLOC: POSITIONS MAP] ===============================================
-  const positionsMap = useMemo(() => {
-    const map = {};
-    for (const p of positions) {
-      const k = (p.symbol || "").toUpperCase();
-      if (!map[k]) map[k] = [];
-      map[k].push(p);
+  // ==== [BLOC: PRIX COURANTS] ===============================================
+  const updateIaPrices = async () => {
+    const symbols = iaPositions.map((p) => (p.symbol || "").toUpperCase());
+    if (symbols.length === 0) return;
+    const map = await fetchBackendPricesMap(symbols);
+    setCurrentPrices((prev) => ({ ...prev, ...map }));
+  };
+
+  // ==== [BLOC: BUY/SELL] ====================================================
+  const sellPosition = (symbol, percent = 100, priceNow = null) => {
+    symbol = (symbol || "").toUpperCase();
+    setIaPositions((prev) => {
+      const idx = prev.findIndex((p) => (p.symbol || "").toUpperCase() === symbol);
+      if (idx < 0) return prev;
+
+      const p = prev[idx];
+      const price = ensureNumber(priceNow ?? currentPrices[symbol] ?? NaN, p.buyPrice);
+      const sellQty =
+        percent >= 100 ? p.qty : round2((ensureNumber(p.qty, 0) * ensureNumber(percent, 100)) / 100);
+
+      const cashDelta = round2(ensureNumber(price, 0) * sellQty);
+      const newQty = round2(ensureNumber(p.qty, 0) - sellQty);
+
+      setIaCash((c) => round2(c + cashDelta));
+      setIaHistory((h) => [
+        {
+          id: `SELL-${Date.now()}`,
+          type: "SELL",
+          symbol,
+          qty: sellQty,
+          price,
+          at: nowIso(),
+          pnlUSD: round2((price - p.buyPrice) * sellQty),
+          pnlPct: round2(((price - p.buyPrice) / p.buyPrice) * 100),
+        },
+        ...h,
+      ]);
+
+      const updated = [...prev];
+      if (newQty <= 0) updated.splice(idx, 1);
+      else updated[idx] = { ...p, qty: newQty };
+
+      pushLog(`Vente ${percent}% ${symbol} @ ${price}`);
+      return updated;
+    });
+  };
+
+  const buyPosition = async (symbol, forcedPrice = null) => {
+    symbol = (symbol || "").toUpperCase();
+    const price = ensureNumber(forcedPrice ?? (await fetchBackendPrice(symbol)), NaN);
+    if (!Number.isFinite(price) || price <= 0) {
+      pushLog(`⚠️ Prix invalide pour ${symbol}, achat annulé.`);
+      return;
     }
-    return map;
-  }, [positions]);
 
-  // ==== [BLOC: METRIQUES & P&L] =============================================
-  const openPositionsValue = useMemo(() => {
-    let total = 0;
-    for (const p of positions) {
+    const investUSD = round2(iaCash * DEFAULT_RULES.buyFraction);
+    if (investUSD <= 0) {
+      pushLog("⚠️ Cash insuffisant.");
+      return;
+    }
+    const qty = round2(investUSD / price);
+    if (qty <= 0) {
+      pushLog("⚠️ Quantité nulle (prix trop élevé ou cash trop faible).");
+      return;
+    }
+
+    const newCash = round2(iaCash - investUSD);
+    const tp = round2(price * (1 + DEFAULT_RULES.takeProfit));
+    const sl = round2(price * (1 - DEFAULT_RULES.stopLoss));
+
+    setIaCash(newCash);
+    setIaPositions((prev) => [
+      {
+        id: `BUY-${Date.now()}`,
+        symbol,
+        qty,
+        buyPrice: price,
+        buyAt: nowIso(),
+        tp,
+        sl,
+      },
+      ...prev,
+    ]);
+    setIaHistory((h) => [
+      {
+        id: `BUY-${Date.now()}`,
+        type: "BUY",
+        symbol,
+        qty,
+        price,
+        at: nowIso(),
+      },
+      ...h,
+    ]);
+    setCurrentPrices((prev) => ({ ...prev, [symbol]: price }));
+    pushLog(`Achat ${symbol} qty ${qty} @ ${price} | TP ${tp} / SL ${sl}`);
+  };
+
+  // ==== [BLOC: CHECK POSITIONS - TP/SL] =====================================
+  const checkPositions = async () => {
+    if (iaPositions.length === 0) return;
+    const map = await fetchBackendPricesMap(iaPositions.map((p) => p.symbol));
+    if (Object.keys(map).length === 0) return;
+
+    setCurrentPrices((prev) => ({ ...prev, ...map }));
+
+    for (const p of iaPositions) {
       const sym = (p.symbol || "").toUpperCase();
-      const price = ensureNum(currentPrices[sym], p.buyPrice);
-      total += ensureNum(p.qty, 0) * ensureNum(price, 0);
-    }
-    return round2(total);
-  }, [positions, currentPrices]);
+      const price = ensureNumber(map[sym], NaN);
+      if (!Number.isFinite(price)) continue;
 
-  const investedAmount = useMemo(() => {
-    let total = 0;
-    for (const p of positions) {
-      total += ensureNum(p.qty, 0) * ensureNum(p.buyPrice, 0);
-    }
-    return round2(total);
-  }, [positions]);
-
-  const realizedProfit = useMemo(() => {
-    let acc = 0;
-    for (const h of history) {
-      if (h.type === "SELL") {
-        if (typeof h.pnlUSD === "number") acc += h.pnlUSD;
-        else if (typeof h.price === "number" && typeof h.qty === "number" && typeof h.buyPrice === "number") {
-          acc += (h.price - h.buyPrice) * h.qty;
-        }
+      if (price >= ensureNumber(p.tp, Infinity)) {
+        sellPosition(sym, 100, price);
+        pushLog(`✅ TP touché sur ${sym} @ ${price}`);
+        continue;
+      }
+      if (price <= ensureNumber(p.sl, 0)) {
+        sellPosition(sym, 100, price);
+        pushLog(`🛑 SL touché sur ${sym} @ ${price}`);
+        continue;
       }
     }
-    return round2(acc);
-  }, [history]);
+  };
 
-  const unrealizedProfit = useMemo(() => {
-    let acc = 0;
-    for (const p of positions) {
-      const sym = (p.symbol || "").toUpperCase();
-      const price = ensureNum(currentPrices[sym], p.buyPrice);
-      acc += (ensureNum(price, 0) - ensureNum(p.buyPrice, 0)) * ensureNum(p.qty, 0);
-    }
-    return round2(acc);
-  }, [positions, currentPrices]);
+  // ==== [BLOC: AUTO-TRADE SUR SIGNAUX] ======================================
+  const scoreThreshold = useMemo(
+    () => DEFAULT_RULES.minScore[riskMode] ?? DEFAULT_RULES.minScore.equilibre,
+    [riskMode]
+  );
 
-  const totalProfit = useMemo(() => round2(realizedProfit + unrealizedProfit), [realizedProfit, unrealizedProfit]);
-  const totalProfitPercent = useMemo(() => {
-    const initial = START_CASH;
-    const currentTotal = cash + openPositionsValue;
-    const perf = ((currentTotal - initial) / initial) * 100;
-    return round2(perf);
-  }, [cash, openPositionsValue]);
-  const totalValue = useMemo(() => round2(cash + openPositionsValue), [cash, openPositionsValue]);
-  const activePositionsCount = useMemo(() => positions.length, [positions]);
-  const totalTrades = useMemo(() => {
-    const buys = history.filter((h) => h.type === "BUY").length;
-    const sells = history.filter((h) => h.type === "SELL").length;
-    return Math.min(buys, sells);
-  }, [history]);
-  const positiveTrades = useMemo(() => {
-    return history.filter((h) => h.type === "SELL" && ensureNum(h.pnlUSD, 0) > 0).length;
-  }, [history]);
+  const fetchLatestSignals = async () => {
+    const arr = await apiTickSignals();
+    return Array.isArray(arr) ? arr : [];
+  };
 
-  // ==== [BLOC: VARIATIONS 5 MINUTES] ========================================
-  const priceChange5m = useMemo(() => {
-    const out = {};
-    const ref = refSnapshot.prices || {};
-    for (const sym of Object.keys(currentPrices)) {
-      const cur = ensureNum(currentPrices[sym], NaN);
-      const base = ensureNum(ref[sym], NaN);
-      if (Number.isFinite(cur) && Number.isFinite(base) && base > 0) {
-        out[sym] = round2(((cur - base) / base) * 100);
-      }
-    }
-    return out;
-  }, [currentPrices, refSnapshot]);
-
-  // ==== [BLOC: MISE À JOUR DES PRIX] ========================================
-  const updatePrices = async () => {
+  const handleSignals = async () => {
     try {
-      const symbols = Array.from(
-        new Set([
-          ...watchlist.map((s) => (s || "").toUpperCase()),
-          ...positions.map((p) => (p.symbol || "").toUpperCase()),
-        ])
-      ).filter(Boolean);
+      const sigs = await fetchLatestSignals();
+      if (!sigs.length) return;
 
-      if (symbols.length === 0) return;
+      for (const s of sigs.slice(0, 10)) {
+        const action = (s.action || s.type || "").toUpperCase(); // BUY / SELL / INFO
+        const symbol = (s.symbol || s.pair || "").replace("/USDT", "").toUpperCase();
+        const score = ensureNumber(s.score, 0);
 
-      const fresh = await fetchBackendPricesMap(symbols);
+        if (!symbol || !action) continue;
 
-      setCurrentPrices((prev) => ({ ...prev, ...fresh }));
-      setLastUpdated(new Date().toISOString());
+        if (action === "BUY" && score >= scoreThreshold) {
+          await buyPosition(symbol);
+        }
 
-      if (!refSnapshot.ts || Date.now() - refSnapshot.ts >= ms(5)) {
-        setRefSnapshot({
-          ts: Date.now(),
-          prices: { ...fresh },
-        });
+        if (action === "SELL") {
+          const pos = iaPositions.find((p) => (p.symbol || "").toUpperCase() === symbol);
+          if (pos) {
+            const pNow = await fetchBackendPrice(symbol);
+            sellPosition(symbol, 100, pNow);
+          }
+        }
       }
     } catch {
       // silencieux
     }
   };
 
-  // ==== [BLOC: POLLING AUTO] ================================================
+  // ==== [BLOC: TICK LOOP] ===================================================
   useEffect(() => {
-    let stop = false;
-    const kick = async () => {
-      if (stop) return;
-      await updatePrices();
-    };
-    kick(); // appel immédiat au mount
-    const id = setInterval(kick, 30_000); // toutes les 30s
-    return () => {
-      stop = true;
-      clearInterval(id);
-    };
-    // dépendances: watchlist/positions pour élargir/réduire la liste suivie
-  }, [watchlist, positions]);
+    if (!isRunning) return;
+    let stopped = false;
 
-  // ==== [BLOC: RESET PORTFOLIO] =============================================
-  const resetPortfolio = () => {
-    setCash(START_CASH);
-    setPositions([]);
+    const tick = async () => {
+      try {
+        await updateIaPrices();
+        await checkPositions();
+        await handleSignals();
+        setLastTickAt(nowIso());
+      } catch {
+        // silencieux
+      }
+      if (!stopped) {
+        timer = setTimeout(tick, Math.max(5, tickSec) * 1000);
+      }
+    };
+
+    let timer = setTimeout(tick, 100);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [isRunning, tickSec, iaPositions, riskMode]);
+
+  // ==== [BLOC: ACTIONS PUBLIQUES] ===========================================
+  const start = () => {
+    if (!isRunning) {
+      setIsRunning(true);
+      pushLog("▶️ IA Trader démarré.");
+    }
   };
 
-  // ==== [BLOC: CONTEXTE - VALUE] ============================================
+  const stop = () => {
+    if (isRunning) {
+      setIsRunning(false);
+      pushLog("⏸️ IA Trader arrêté.");
+    }
+  };
+
+  const resetIATrader = () => {
+    setIaStart(nowIso());
+    setIaCash(10000);
+    setIaPositions([]);
+    setIaHistory([]);
+    setCurrentPrices({});
+    pushLog("♻️ IA Trader réinitialisé (cash 10 000$).");
+  };
+
+  // ==== [BLOC: CONTEXTE VALUE] ==============================================
   const value = useMemo(
     () => ({
-      // ÉTATS
-      portfolioName,
-      cash,
-      positions,
-      history,
-      watchlist,
+      // état
+      iaName,
+      iaStart,
+      iaCash,
+      iaPositions,
+      iaHistory,
       currentPrices,
-      lastUpdated,
-      positionsMap,
-
-      // METRIQUES
-      investedAmount,
-      openPositionsValue,
+      isRunning,
+      riskMode,
+      lastTickAt,
+      tickSec,
       totalValue,
-      totalProfit,
-      totalProfitPercent,
-      activePositionsCount,
-      totalTrades,
-      positiveTrades,
-      priceChange5m,
 
-      // ACTIONS
-      setWatchlist,
-      updatePrices,
-      buyPosition, // (symbol, usdAmount) — plus bas
-      sellPosition, // (symbol, percent, priceNow?) — plus bas
-      resetPortfolio,
-      setPortfolioName,
+      // actions
+      setRiskMode,
+      setTickSec,
+      start,
+      stop,
+      resetIATrader,
+      buyPosition,
+      sellPosition,
+      updateIaPrices,
     }),
     [
-      portfolioName,
-      cash,
-      positions,
-      history,
-      watchlist,
+      iaName,
+      iaStart,
+      iaCash,
+      iaPositions,
+      iaHistory,
       currentPrices,
-      lastUpdated,
-      positionsMap,
-      investedAmount,
-      openPositionsValue,
+      isRunning,
+      riskMode,
+      lastTickAt,
+      tickSec,
       totalValue,
-      totalProfit,
-      totalProfitPercent,
-      activePositionsCount,
-      totalTrades,
-      positiveTrades,
-      priceChange5m,
     ]
   );
 
-  // ==== [BLOC: ACHAT / VENTE] ===============================================
-  const buyPosition = async (symbol, usdAmount) => {
-    symbol = (symbol || "").toUpperCase();
-    const amountUSD = round2(ensureNum(usdAmount, 0));
-    if (amountUSD <= 0) return;
-    if (amountUSD > cash) return;
-
-    const price = await fetchBackendPrice(symbol);
-    if (!Number.isFinite(price) || price <= 0) return;
-
-    const qty = round2(amountUSD / price);
-    if (qty <= 0) return;
-
-    const buyEvent = {
-      id: `BUY-${Date.now()}`,
-      type: "BUY",
-      symbol,
-      qty,
-      price,
-      at: nowIso(),
-    };
-
-    setCash((c) => round2(c - amountUSD));
-    setPositions((prev) => [
-      {
-        id: `POS-${Date.now()}`,
-        symbol,
-        qty,
-        buyPrice: price,
-        buyAt: buyEvent.at,
-      },
-      ...prev,
-    ]);
-    setHistory((h) => [buyEvent, ...h]);
-    setCurrentPrices((prev) => ({ ...prev, [symbol]: price }));
-  };
-
-  const sellPosition = async (symbol, percent = 100, priceNow = null) => {
-    symbol = (symbol || "").toUpperCase();
-    percent = Math.min(100, Math.max(0, ensureNum(percent, 100)));
-    if (positions.length === 0) return;
-
-    const idx = positions.findIndex((p) => (p.symbol || "").toUpperCase() === symbol);
-    if (idx < 0) return;
-
-    const pos = positions[idx];
-    const market = Number.isFinite(priceNow) ? priceNow : await fetchBackendPrice(symbol);
-    const price = ensureNum(market, pos.buyPrice);
-
-    const sellQty = percent >= 100 ? pos.qty : round2((ensureNum(pos.qty, 0) * percent) / 100);
-    if (sellQty <= 0) return;
-
-    const proceeds = round2(sellQty * price);
-    const pnlUSD = round2((price - ensureNum(pos.buyPrice, 0)) * sellQty);
-
-    const sellEvent = {
-      id: `SELL-${Date.now()}`,
-      type: "SELL",
-      symbol,
-      qty: sellQty,
-      price,
-      at: nowIso(),
-      pnlUSD,
-      pnlPct: ensureNum(pos.buyPrice, 0) > 0 ? round2(((price - pos.buyPrice) / pos.buyPrice) * 100) : 0,
-      buyPrice: pos.buyPrice,
-    };
-
-    setCash((c) => round2(c + proceeds));
-    setPositions((prev) => {
-      const newQty = round2(ensureNum(pos.qty, 0) - sellQty);
-      const updated = [...prev];
-      if (newQty <= 0) updated.splice(idx, 1);
-      else updated[idx] = { ...pos, qty: newQty };
-      return updated;
-    });
-    setHistory((h) => [sellEvent, ...h]);
-    setCurrentPrices((prev) => ({ ...prev, [symbol]: price }));
-  };
-
-  return <PortfolioContext.Provider value={value}>{children}</PortfolioContext.Provider>;
+  return <IATraderContext.Provider value={value}>{children}</IATraderContext.Provider>;
 };
 
-// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
-// - Ajout d’un polling auto: appel immédiat + toutes les 30s (updatePrices()).
-// - Aucune dépendance au clic utilisateur pour voir des prix.
-// - Try/catch silencieux pour éviter des erreurs UI si l’API rate temporairement.
-// - Reste de la logique inchangée.
+// ==== [BLOC: EXPORT HOOK] ===================================================
+export const useIATrader = () => useContext(IATraderContext);
+
+// ==== [BLOC: EXPORTS] =======================================================
 export default IATraderContext;
 
-export { IATraderProvider };
+// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
+// - Restauration d’un IATraderContext complet (provider + exports nommé & default).
+// - Routage 100% via backend (utils/api), plus d’appels directs Binance (CORS).
+// - Acceptation des clés de prix 'BTC' et 'BTCUSDT' dans la map de retour.
+// - Tick loop IA : update prix -> check TP/SL -> signaux, avec persistance Firestore.
+// - Annotations de blocs ajoutées pour repérage visuel.
