@@ -41,7 +41,7 @@ const Admin = () => {
     }
     setSending(true);
     try {
-      const res = await fetch(((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(//+$/,""))+"/send-manual-signal", {
+      const res = await fetch(((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(/\/+$/,""))+"/send-manual-signal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

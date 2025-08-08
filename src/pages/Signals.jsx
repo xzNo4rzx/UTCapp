@@ -29,7 +29,7 @@ const Signals = () => {
   // 🔁 Lecture logs serveur API (version JSON)
 const fetchLogLines = async () => {
   try {
-    const res = await fetch(((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(//+$/,""))+"/get-latest-signals");
+    const res = await fetch(((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(/\/+$/,""))+"/get-latest-signals");
     const json = await res.json();
     if (Array.isArray(json.log)) {
       setLogs(json.log.slice(-25).reverse());
