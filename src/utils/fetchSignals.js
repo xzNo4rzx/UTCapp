@@ -1,4 +1,4 @@
-const API_BASE = "https://utc-api.onrender.com";
+const API_BASE = ((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(/\/+$/,""));
 
 const fetchSignals = async () => {
   try {
