@@ -2,26 +2,27 @@
 
 // ==== [BLOC: IMPORTS] =======================================================
 import React, { createContext, useEffect, useState, useMemo, useContext } from "react";
-import axios from "axios";
 import { useAuth } from "./AuthContext";
 import { loadIATrader, saveIATrader } from "../utils/firestoreIATrader";
+import {
+  apiGetPrice,
+  apiGetPrices,
+  apiGetKlines, // réservé si besoin plus tard
+  apiTickSignals,
+  apiLatestSignals,
+} from "../utils/api";
 
 // ==== [BLOC: CONTEXTE] ======================================================
 export const IATraderContext = createContext();
 
 // ==== [BLOC: CONSTANTES] ====================================================
-const BINANCE_BASE = "https://api.binance.com";
 const getApiBase = () => import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 const DEFAULT_RULES = Object.freeze({
-  // Investit 1/3 du cash dispo par signal
   buyFraction: 1 / 3,
-  // TP 3% - SL 5%
   takeProfit: 0.03,
   stopLoss: 0.05,
-  // Intervalle de contrôle en secondes
   checkIntervalSec: 60,
-  // Score minimal en fonction du mode de risque
   minScore: {
     conservateur: 16,
     equilibre: 12,
@@ -29,40 +30,29 @@ const DEFAULT_RULES = Object.freeze({
   },
 });
 
-// ==== [BLOC: HELPERS BINANCE] ===============================================
-const symbolToBinance = (sym) => {
-  // Permet BTC -> BTCUSDT, ETH -> ETHUSDT, etc.
-  const s = (sym || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return s.endsWith("USDT") ? s : `${s}USDT`;
-};
+// ==== [BLOC: HELPERS BACKEND/PRIX] ==========================================
+const nowIso = () => new Date().toISOString();
+const round2 = (n) => Math.round(n * 100) / 100;
+const ensureNumber = (v, fb = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
 
-const fetchBinancePrice = async (symbol) => {
-  const pair = symbolToBinance(symbol);
-  const url = `${BINANCE_BASE}/api/v3/ticker/price?symbol=${pair}`;
-  const { data } = await axios.get(url, { timeout: 7000 });
-  const p = parseFloat(data?.price);
+const fetchBackendPrice = async (symbol) => {
+  const sym = String(symbol || "").toUpperCase();
+  const { price } = await apiGetPrice(sym);
+  const p = Number(price);
   return Number.isFinite(p) ? p : NaN;
 };
 
-const fetchBinancePricesMap = async (symbols) => {
+const fetchBackendPricesMap = async (symbols) => {
   if (!symbols || symbols.length === 0) return {};
-  const unique = Array.from(new Set(symbols));
-  const results = await Promise.allSettled(unique.map((s) => fetchBinancePrice(s)));
-  const map = {};
-  unique.forEach((s, i) => {
-    const v = results[i].status === "fulfilled" ? results[i].value : NaN;
-    if (Number.isFinite(v)) map[s.toUpperCase()] = v;
-  });
-  return map;
+  const uniq = Array.from(new Set(symbols.map((s) => (s || "").toUpperCase())));
+  const { prices: mp = {} } = await apiGetPrices(uniq);
+  const out = {};
+  for (const s of uniq) {
+    const v = Number(mp?.[s]);
+    if (Number.isFinite(v)) out[s] = v;
+  }
+  return out;
 };
-
-// ==== [BLOC: REDUCTION/FORMAT] ==============================================
-const nowIso = () => new Date().toISOString();
-
-const round2 = (n) => Math.round(n * 100) / 100;
-
-const ensureNumber = (v, fallback = 0) =>
-  typeof v === "number" && Number.isFinite(v) ? v : fallback;
 
 // ==== [BLOC: PROVIDER] ======================================================
 export const IATraderProvider = ({ children }) => {
@@ -73,7 +63,7 @@ export const IATraderProvider = ({ children }) => {
   const [iaStart, setIaStart] = useState(() => nowIso());
   const [iaCash, setIaCash] = useState(10000);
   const [iaPositions, setIaPositions] = useState([]); // {id, symbol, qty, buyPrice, buyAt, tp, sl}
-  const [iaHistory, setIaHistory] = useState([]); // {id, type: 'BUY'|'SELL', symbol, qty, price, at, pnlUSD?, pnlPct?}
+  const [iaHistory, setIaHistory] = useState([]); // {id, type:'BUY'|'SELL', symbol, qty, price, at, pnlUSD?, pnlPct?}
   const [currentPrices, setCurrentPrices] = useState({}); // {SYM: price}
   const [isRunning, setIsRunning] = useState(false);
   const [riskMode, setRiskMode] = useState("equilibre"); // 'conservateur' | 'equilibre' | 'aggressif'
@@ -95,7 +85,6 @@ export const IATraderProvider = ({ children }) => {
   const pushLog = (msg) => {
     setLog((old) => {
       const next = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...old];
-      // garde 500 lignes max
       return next.slice(0, 500);
     });
   };
@@ -115,7 +104,7 @@ export const IATraderProvider = ({ children }) => {
           setRiskMode(data.riskMode || "equilibre");
           pushLog("Données IA Trader chargées depuis Firestore.");
         }
-      } catch (e) {
+      } catch {
         pushLog("⚠️ Échec chargement Firestore (IA Trader).");
       }
     };
@@ -137,7 +126,7 @@ export const IATraderProvider = ({ children }) => {
           lastTickAt,
         });
       } catch {
-        // silencieux pour éviter spam
+        // silencieux
       }
     };
     save();
@@ -147,7 +136,7 @@ export const IATraderProvider = ({ children }) => {
   const updateIaPrices = async () => {
     const symbols = iaPositions.map((p) => (p.symbol || "").toUpperCase());
     if (symbols.length === 0) return;
-    const map = await fetchBinancePricesMap(symbols);
+    const map = await fetchBackendPricesMap(symbols);
     setCurrentPrices((prev) => ({ ...prev, ...map }));
   };
 
@@ -159,10 +148,7 @@ export const IATraderProvider = ({ children }) => {
       if (idx < 0) return prev;
 
       const p = prev[idx];
-      const price = ensureNumber(
-        priceNow ?? currentPrices[symbol] ?? NaN,
-        p.buyPrice
-      );
+      const price = ensureNumber(priceNow ?? currentPrices[symbol] ?? NaN, p.buyPrice);
       const sellQty =
         percent >= 100
           ? p.qty
@@ -199,8 +185,7 @@ export const IATraderProvider = ({ children }) => {
 
   const buyPosition = async (symbol, forcedPrice = null) => {
     symbol = (symbol || "").toUpperCase();
-    const price =
-      ensureNumber(forcedPrice ?? (await fetchBinancePrice(symbol)), NaN);
+    const price = ensureNumber(forcedPrice ?? (await fetchBackendPrice(symbol)), NaN);
     if (!Number.isFinite(price) || price <= 0) {
       pushLog(`⚠️ Prix invalide pour ${symbol}, achat annulé.`);
       return;
@@ -252,24 +237,21 @@ export const IATraderProvider = ({ children }) => {
   // ==== [BLOC: CHECK POSITIONS - TP/SL] =====================================
   const checkPositions = async () => {
     if (iaPositions.length === 0) return;
-    const map = await fetchBinancePricesMap(iaPositions.map((p) => p.symbol));
+    const map = await fetchBackendPricesMap(iaPositions.map((p) => p.symbol));
     if (Object.keys(map).length === 0) return;
 
     setCurrentPrices((prev) => ({ ...prev, ...map }));
 
-    // Boucle de contrôle TP/SL
     for (const p of iaPositions) {
       const sym = (p.symbol || "").toUpperCase();
       const price = ensureNumber(map[sym], NaN);
       if (!Number.isFinite(price)) continue;
 
-      // TP
       if (price >= ensureNumber(p.tp, Infinity)) {
         sellPosition(sym, 100, price);
         pushLog(`✅ TP touché sur ${sym} @ ${price}`);
         continue;
       }
-      // SL
       if (price <= ensureNumber(p.sl, 0)) {
         sellPosition(sym, 100, price);
         pushLog(`🛑 SL touché sur ${sym} @ ${price}`);
@@ -279,24 +261,22 @@ export const IATraderProvider = ({ children }) => {
   };
 
   // ==== [BLOC: AUTO-TRADE SUR SIGNAUX] ======================================
-  const fetchLatestSignals = async () => {
-    const api = getApiBase();
-    const url = `${api}/utcapp/signals`;
-    const { data } = await axios.get(url, { timeout: 8000 });
-    return Array.isArray(data) ? data : [];
-  };
-
   const scoreThreshold = useMemo(
     () => DEFAULT_RULES.minScore[riskMode] ?? DEFAULT_RULES.minScore.equilibre,
     [riskMode]
   );
+
+  const fetchLatestSignals = async () => {
+    // tick moteur côté backend et renvoie les signaux du moment
+    const arr = await apiTickSignals();
+    return Array.isArray(arr) ? arr : [];
+  };
 
   const handleSignals = async () => {
     try {
       const sigs = await fetchLatestSignals();
       if (!sigs.length) return;
 
-      // On prend les plus récents en priorité
       for (const s of sigs.slice(0, 10)) {
         const action = (s.action || s.type || "").toUpperCase(); // BUY / SELL / INFO
         const symbol = (s.symbol || s.pair || "").replace("/USDT", "").toUpperCase();
@@ -304,18 +284,14 @@ export const IATraderProvider = ({ children }) => {
 
         if (!symbol || !action) continue;
 
-        // BUY auto si score >= seuil
         if (action === "BUY" && score >= scoreThreshold) {
           await buyPosition(symbol);
         }
 
-        // SELL auto si position ouverte
         if (action === "SELL") {
-          const pos = iaPositions.find(
-            (p) => (p.symbol || "").toUpperCase() === symbol
-          );
+          const pos = iaPositions.find((p) => (p.symbol || "").toUpperCase() === symbol);
           if (pos) {
-            const pNow = await fetchBinancePrice(symbol);
+            const pNow = await fetchBackendPrice(symbol);
             sellPosition(symbol, 100, pNow);
           }
         }
@@ -344,12 +320,12 @@ export const IATraderProvider = ({ children }) => {
       }
     };
 
-    let timer = setTimeout(tick, 100); // démarrage rapide
+    let timer = setTimeout(tick, 100);
     return () => {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [isRunning, tickSec, iaPositions, riskMode]); // iaPositions pour pouvoir ajuster TP/SL rapidement
+  }, [isRunning, tickSec, iaPositions, riskMode]);
 
   // ==== [BLOC: ACTIONS PUBLIQUES] ===========================================
   const start = () => {
@@ -416,20 +392,15 @@ export const IATraderProvider = ({ children }) => {
     ]
   );
 
-  return (
-    <IATraderContext.Provider value={value}>{children}</IATraderContext.Provider>
-  );
+  return <IATraderContext.Provider value={value}>{children}</IATraderContext.Provider>;
 };
 
 // ==== [BLOC: EXPORT HOOK] ===================================================
 export const useIATrader = () => useContext(IATraderContext);
 
 // ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
-// - Suppression des imports React en double (erreur "already been declared").
-// - Bascule complète sur BINANCE (fetch des prix via /api/v3/ticker/price).
-// - Ajout d’un loop IA autonome: update prix -> check TP/SL -> lecture signaux -> exécution.
-// - Achat en USD (1/3 du cash), quantité auto, TP 3% / SL 5% conformément aux règles.
-// - Ventes partielles/complètes supportées, historique enrichi (pnl USD/%).
-// - Persistance Firestore conservée (loadIATrader/saveIATrader).
-// - Exposition d’API claires: start/stop/reset, buyPosition, sellPosition, updateIaPrices.
-// - Annotations de blocs ajoutées pour faciliter les futures modifications.
+// - Suppression d’axios et des appels directs à https://api.binance.com (CORS).
+// - Intégration du proxy backend via utils/api: apiGetPrice/apiGetPrices/apiTickSignals.
+// - Maintien intégral de la logique existante (IA loop, TP/SL, persistance Firestore).
+// - Prix courants/BUY/SELL/TP-SL routés via fetchBackendPrice(s) pour cohérence.
+// - Hooks/structures inchangés pour compatibilité avec le reste de l’app.

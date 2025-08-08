@@ -1,16 +1,15 @@
 // FICHIER: ~/Documents/utc-app-full/utc-app-full/src/context/PortfolioContext.jsx
 
 // ==== [BLOC: IMPORTS] =======================================================
-import React, { createContext, useEffect, useMemo, useState, useContext } from "react";
-import axios from "axios";
+import React, { createContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext";
 import { loadPortfolio, savePortfolio } from "../utils/firestorePortfolio";
+import { apiGetPrice, apiGetPrices } from "../utils/api";
 
 // ==== [BLOC: CONTEXTE] ======================================================
 export const PortfolioContext = createContext();
 
 // ==== [BLOC: CONSTANTES GLOBALES] ===========================================
-const BINANCE_BASE = "https://api.binance.com";
 const START_CASH = 10000;
 
 // Liste de suivi par défaut (peut être étendue par la suite)
@@ -22,30 +21,25 @@ const DEFAULT_SYMBOLS = [
   "STX", "ENS", "CRV", "HBAR", "CRO"
 ];
 
-// ==== [BLOC: HELPERS - BINANCE] =============================================
-const toBinancePair = (sym) => {
-  const s = (sym || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return s.endsWith("USDT") ? s : `${s}USDT`;
-};
-
-const fetchBinancePrice = async (symbol) => {
-  const pair = toBinancePair(symbol);
-  const url = `${BINANCE_BASE}/api/v3/ticker/price?symbol=${pair}`;
-  const { data } = await axios.get(url, { timeout: 7000 });
-  const p = parseFloat(data?.price);
+// ==== [BLOC: HELPERS - BACKEND BINANCE PROXY] ===============================
+// Le backend expose: /price/{symbol} et /prices?symbols=BTC,ETH
+const fetchBackendPrice = async (symbol) => {
+  const sym = String(symbol || "").toUpperCase();
+  const { price } = await apiGetPrice(sym);
+  const p = Number(price);
   return Number.isFinite(p) ? p : NaN;
 };
 
-const fetchBinancePricesMap = async (symbols) => {
+const fetchBackendPricesMap = async (symbols) => {
   if (!symbols || symbols.length === 0) return {};
   const uniq = Array.from(new Set(symbols.map((s) => (s || "").toUpperCase())));
-  const results = await Promise.allSettled(uniq.map(fetchBinancePrice));
-  const map = {};
-  uniq.forEach((s, i) => {
-    const v = results[i].status === "fulfilled" ? results[i].value : NaN;
-    if (Number.isFinite(v)) map[s] = v;
-  });
-  return map;
+  const { prices: mp = {} } = await apiGetPrices(uniq);
+  const out = {};
+  for (const s of uniq) {
+    const v = Number(mp?.[s]);
+    if (Number.isFinite(v)) out[s] = v;
+  }
+  return out;
 };
 
 // ==== [BLOC: HELPERS - UTILS] ===============================================
@@ -61,7 +55,6 @@ export const PortfolioProvider = ({ children }) => {
 
   // ---- États persistés (localStorage + Firestore) ---------------------------
   const [portfolioName, setPortfolioName] = useState(() => {
-    // PT code: PTYYYYMM-### (increment simple local)
     const d = new Date();
     const tag = `PT${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
     const n = Number(localStorage.getItem("ptCounter") || "1");
@@ -175,7 +168,6 @@ export const PortfolioProvider = ({ children }) => {
   }, [positions]);
 
   // ==== [BLOC: METRIQUES & P&L] =============================================
-  // Valeur actuelle des positions ouvertes
   const openPositionsValue = useMemo(() => {
     let total = 0;
     for (const p of positions) {
@@ -186,7 +178,6 @@ export const PortfolioProvider = ({ children }) => {
     return round2(total);
   }, [positions, currentPrices]);
 
-  // Investi = somme (qty * buyPrice) des positions encore ouvertes
   const investedAmount = useMemo(() => {
     let total = 0;
     for (const p of positions) {
@@ -195,10 +186,7 @@ export const PortfolioProvider = ({ children }) => {
     return round2(total);
   }, [positions]);
 
-  // Profit réalisé (SELL) + latent (positions ouvertes)
   const realizedProfit = useMemo(() => {
-    // On calcule sur l'historique SELL uniquement quand on a l'info pnlUSD/pnlPct,
-    // sinon on dérive depuis le prix d'achat stocké dans l'event si présent.
     let acc = 0;
     for (const h of history) {
       if (h.type === "SELL") {
@@ -234,7 +222,6 @@ export const PortfolioProvider = ({ children }) => {
 
   const activePositionsCount = useMemo(() => positions.length, [positions]);
   const totalTrades = useMemo(() => {
-    // BUY + SELL comptés comme 1 trade complet → on calcule min(countBUY, countSELL)
     const buys = history.filter((h) => h.type === "BUY").length;
     const sells = history.filter((h) => h.type === "SELL").length;
     return Math.min(buys, sells);
@@ -245,7 +232,6 @@ export const PortfolioProvider = ({ children }) => {
   }, [history]);
 
   // ==== [BLOC: VARIATIONS 5 MINUTES] ========================================
-  // map de variations en % par symbole
   const priceChange5m = useMemo(() => {
     const out = {};
     const ref = refSnapshot.prices || {};
@@ -261,7 +247,6 @@ export const PortfolioProvider = ({ children }) => {
 
   // ==== [BLOC: MISE À JOUR DES PRIX] ========================================
   const updatePrices = async () => {
-    // On met à jour les prix pour tous les symboles visibles: watchlist + positions
     const symbols = Array.from(
       new Set([
         ...watchlist.map((s) => (s || "").toUpperCase()),
@@ -271,34 +256,30 @@ export const PortfolioProvider = ({ children }) => {
 
     if (symbols.length === 0) return;
 
-    const fresh = await fetchBinancePricesMap(symbols);
+    const fresh = await fetchBackendPricesMap(symbols);
 
     setCurrentPrices((prev) => ({ ...prev, ...fresh }));
     setLastUpdated(new Date().toISOString());
 
-    // Si le snapshot de référence a plus de 5 minutes → on le remplace
     if (!refSnapshot.ts || Date.now() - refSnapshot.ts >= ms(5)) {
       setRefSnapshot({
         ts: Date.now(),
-        prices: { ...fresh }, // on prend la nouvelle photo
+        prices: { ...fresh },
       });
     }
   };
 
   // ==== [BLOC: ACHAT / VENTE] ===============================================
-  // Achat en USD (montant fixe), quantité calculée automatiquement
   const buyPosition = async (symbol, usdAmount) => {
     symbol = (symbol || "").toUpperCase();
     const amountUSD = round2(ensureNum(usdAmount, 0));
     if (amountUSD <= 0) return;
 
-    // Bloque un achat au-delà du cash disponible
     if (amountUSD > cash) {
-      // On refuse l'achat si pas assez de cash (exigence utilisateur)
       return;
     }
 
-    const price = await fetchBinancePrice(symbol);
+    const price = await fetchBackendPrice(symbol);
     if (!Number.isFinite(price) || price <= 0) return;
 
     const qty = round2(amountUSD / price);
@@ -326,23 +307,20 @@ export const PortfolioProvider = ({ children }) => {
     ]);
     setHistory((h) => [buyEvent, ...h]);
 
-    // met à jour le prix courant pour activer tout de suite le bouton VENTE
     setCurrentPrices((prev) => ({ ...prev, [symbol]: price }));
   };
 
-  // Vente (percent = 0-100), option priceNow pour forcer un prix précis
   const sellPosition = async (symbol, percent = 100, priceNow = null) => {
     symbol = (symbol || "").toUpperCase();
     percent = Math.min(100, Math.max(0, ensureNum(percent, 100)));
 
     if (positions.length === 0) return;
 
-    // On vend d'abord la première position ouverte correspondante (simple)
     const idx = positions.findIndex((p) => (p.symbol || "").toUpperCase() === symbol);
     if (idx < 0) return;
 
     const pos = positions[idx];
-    const market = Number.isFinite(priceNow) ? priceNow : await fetchBinancePrice(symbol);
+    const market = Number.isFinite(priceNow) ? priceNow : await fetchBackendPrice(symbol);
     const price = ensureNum(market, pos.buyPrice);
 
     const sellQty = percent >= 100 ? pos.qty : round2((ensureNum(pos.qty, 0) * percent) / 100);
@@ -360,13 +338,11 @@ export const PortfolioProvider = ({ children }) => {
       at: nowIso(),
       pnlUSD,
       pnlPct: ensureNum(pos.buyPrice, 0) > 0 ? round2(((price - pos.buyPrice) / pos.buyPrice) * 100) : 0,
-      buyPrice: pos.buyPrice, // utile pour calcul postérieur
+      buyPrice: pos.buyPrice,
     };
 
-    // maj du cash
     setCash((c) => round2(c + proceeds));
 
-    // maj positions
     setPositions((prev) => {
       const newQty = round2(ensureNum(pos.qty, 0) - sellQty);
       const updated = [...prev];
@@ -376,17 +352,13 @@ export const PortfolioProvider = ({ children }) => {
     });
 
     setHistory((h) => [sellEvent, ...h]);
-
-    // maj prix courant
     setCurrentPrices((prev) => ({ ...prev, [symbol]: price }));
   };
 
   // ==== [BLOC: RESET PORTFOLIO] =============================================
-  // Remet le cash à 10k, vide positions mais conserve l'historique (bilan).
   const resetPortfolio = () => {
     setCash(START_CASH);
     setPositions([]);
-    // Historique conservé pour bilan global
   };
 
   // ==== [BLOC: CONTEXTE - VALUE] ============================================
@@ -416,10 +388,10 @@ export const PortfolioProvider = ({ children }) => {
       // ACTIONS
       setWatchlist,
       updatePrices,
-      buyPosition, // (symbol, usdAmount)
-      sellPosition, // (symbol, percent, priceNow?)
+      buyPosition,
+      sellPosition,
       resetPortfolio,
-      setPortfolioName, // si besoin
+      setPortfolioName,
     }),
     [
       portfolioName,
@@ -446,12 +418,8 @@ export const PortfolioProvider = ({ children }) => {
 };
 
 // ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
-// - Bascule 100% BINANCE pour les prix (suppression CryptoCompare).
-// - Achat en USD strict (buyPosition(symbol, usdAmount)), blocage si montant > cash.
-// - Calculs P&L complets: réalisé (historique SELL) + latent (positions ouvertes).
-// - positionsMap généré pour activer immédiatement les boutons Vente dans l’UI.
-// - updatePrices consolide watchlist + positions, snapshot 5 minutes pour variations (priceChange5m).
-// - Synchronisation locale (localStorage) + Firestore (best-effort): cash, positions, history, watchlist.
-// - Remise à 10 000$ via resetPortfolio tout en conservant l’historique pour le bilan.
-// - Annotations de blocs ajoutées pour modifications ciblées.
-// - Signature publique stable pour Trading.jsx / Profile.jsx / TopMovers.jsx / CryptoList.jsx.
+// - Suppression des appels directs à https://api.binance.com (CORS).
+// - Remplacement par un proxy via ton backend: apiGetPrice / apiGetPrices.
+// - Maintien de toute la logique existante (états, P&L, snapshots, Firestore).
+// - Fonctions buy/sell et updatePrices routées via fetchBackendPrice(s).
+// - Annotations de blocs pour modifications ciblées.
