@@ -24,7 +24,9 @@ export async function apiGetPrice(symbol) {
 }
 export async function apiGetPrices(symbols = []) {
   const list = symbols.map((s) => String(s).toUpperCase()).join(",");
-  return toJson(await fetch(`${API_BASE}/prices?symbols=${encodeURIComponent(list)}`));
+  const url = `${API_BASE}/prices?symbols=${encodeURIComponent(list)}`;
+console.log("[API] GET", url);
+return toJson(await fetch(url));
 }
 export async function apiGetKlines(pair = "BTC/USDT", interval = "1m", limit = 120) {
   const p = String(pair || "BTC/USDT").toUpperCase();
