@@ -2,7 +2,7 @@ const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import React, { useEffect, useState, useContext } from "react";
 import { Link } from "react-router-dom";
 import { PortfolioContext } from "../context/PortfolioContext";
-import { IATraderContext } from "../context/IATraderContext";
+import IATraderContext from "../context/IATraderContext";
 import { useUserStorage } from "../hooks/useUserStorage";
 
 const Home = () => {
