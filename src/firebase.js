@@ -3,6 +3,7 @@
 // ==== [BLOC: IMPORTS] =======================================================
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // ==== [BLOC: CONFIG] ========================================================
 const firebaseConfig = {
@@ -17,7 +18,8 @@ const firebaseConfig = {
 // ==== [BLOC: INIT] ==========================================================
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 // ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
-// - Nouveau point d'entrée Firebase V9: initialise l'app et exporte `auth`.
-// - Corrige l’erreur "getAuth is not defined" en centralisant l’import/usage.
+// - Ajout Firestore: export 'db' (corrige l’erreur "db is not exported by src/firebase.js").
+// - App/Auth conservés.

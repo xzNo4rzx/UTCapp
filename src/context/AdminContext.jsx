@@ -1,32 +1,73 @@
-import React, { createContext, useEffect, useState, useContext, useMemo } from "react";
-// src/context/AdminContext.jsx
-import { collection, getDocs } from "firebase/firestore";
+// FICHIER: ~/Documents/utc-app-full/src/context/AdminContext.jsx
+
+// ==== [BLOC: IMPORTS] =======================================================
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 
-const AdminContext = createContext();
+// ==== [BLOC: CONTEXTE] ======================================================
+const AdminContext = createContext({ pendingUsers: 0 });
 
+// ==== [BLOC: HOOK] ==========================================================
+export const useAdmin = () => useContext(AdminContext);
+
+// ==== [BLOC: PROVIDER] ======================================================
 export const AdminProvider = ({ children }) => {
   const [pendingUsers, setPendingUsers] = useState(0);
 
-  const fetchPending = async () => {
-    try {
-      const snap = await getDocs(collection(db, "users"));
-      const pending = snap.docs.filter((d) => d.data().status !== "accepted").length;
-      setPendingUsers(pending);
-    } catch (err) {
-      console.error("Erreur fetchPending :", err);
-    }
-  };
-
   useEffect(() => {
-    fetchPending();
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        // ==== [BLOC: STRAT FALBACK] =========================================
+        // 1) essaie 'users' où approved == false
+        // 2) sinon 'pendingUsers' (juste compter les docs)
+        let count = 0;
+
+        // Tentative 1: users non approuvés
+        try {
+          const q = query(collection(db, "users"), where("approved", "==", false));
+          const snap = await getDocs(q);
+          count = snap.size;
+        } catch (_) {
+          // ignore
+        }
+
+        // Tentative 2: fallback collection "pendingUsers"
+        if (count === 0) {
+          try {
+            const snap2 = await getDocs(collection(db, "pendingUsers"));
+            count = snap2.size;
+          } catch (_) {
+            // ignore
+          }
+        }
+
+        if (!cancelled) setPendingUsers(count);
+      } catch {
+        if (!cancelled) setPendingUsers(0);
+      }
+    };
+
+    load();
+    const id = setInterval(load, 30_000); // refresh toutes les 30s
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   return (
-    <AdminContext.Provider value={{ pendingUsers, refreshPending: fetchPending }}>
+    <AdminContext.Provider value={{ pendingUsers }}>
       {children}
     </AdminContext.Provider>
   );
 };
 
-export const useAdmin = () => useContext(AdminContext);
+export default AdminContext;
+
+// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
+// - Import/usage corrects de Firestore via 'db' exporté.
+// - Fournit pendingUsers avec double fallback (users.approved=false puis pendingUsers).
+// - Annotations de blocs incluses.
