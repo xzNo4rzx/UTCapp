@@ -34,6 +34,7 @@ const fetchBackendPricesMap = async (symbols) => {
   if (!symbols || symbols.length === 0) return {};
   const uniq = Array.from(new Set(symbols.map((s) => (s || "").toUpperCase())));
   const { prices: mp = {} } = await apiGetPrices(uniq);
+console.log('[PRICES] symbols=', uniq, 'map=', mp);
   const out = {};
   for (const s of uniq) {
     const v = Number(mp?.[s]);
