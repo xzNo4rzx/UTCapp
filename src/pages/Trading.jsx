@@ -1,326 +1,358 @@
-const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import fetchPrices from "../utils/fetchPrices";
+// FICHIER: ~/Documents/utc-app-full/utc-app-full/src/pages/Trading.jsx
+
+// ==== [BLOC: IMPORTS] =======================================================
+import React, { useEffect, useMemo, useState, useContext } from "react";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "../components/SellModal";
-import { useUserStorage } from "../hooks/useUserStorage";
 
+// ==== [BLOC: HELPERS UI] ====================================================
+const fmtUSD = (n) => {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+  if (n >= 1000) return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `$${n.toFixed(2)}`;
+};
+const fmtPct = (n) => (typeof n === "number" && Number.isFinite(n) ? `${n.toFixed(2)}%` : "—");
+const fmtPrice = (n) => {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+  if (n >= 1) return n.toFixed(2);
+  if (n >= 0.01) return n.toFixed(4);
+  return n.toFixed(6);
+};
+
+// ==== [BLOC: MODALE ACHAT] ==================================================
+const BuyModal = ({ show, symbol, amount, onChangeAmount, onClose, onConfirm }) => {
+  if (!show) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#0009", zIndex: 1000 }}>
+      <div style={{ width: "min(520px, 92vw)", margin: "10% auto", background: "#1f1f1f", borderRadius: 8, color: "#fff", padding: "1.25rem 1.25rem 1rem" }}>
+        <h3 style={{ marginTop: 0 }}>ACHAT — {symbol}</h3>
+        <label style={{ display: "block", marginBottom: 8 }}>Montant en USD</label>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          value={amount}
+          onChange={(e) => onChangeAmount(e.target.value)}
+          style={{ width: "100%", padding: "10px 12px", borderRadius: 6, border: "1px solid #333", background: "#121212", color: "#fff" }}
+          placeholder="Ex: 1000"
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "10px 14px", border: "none", borderRadius: 6, background: "#555", color: "#fff", cursor: "pointer" }}>Annuler</button>
+          <button onClick={onConfirm} style={{ padding: "10px 14px", border: "none", borderRadius: 6, background: "#198754", color: "#fff", cursor: "pointer", fontWeight: 600 }}>Confirmer l’achat</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==== [BLOC: PAGE TRADING] ==================================================
 const Trading = () => {
   const {
     portfolioName, cash, positions, currentPrices,
     buyPosition, sellPosition, updatePrices,
     investedAmount, totalProfit, totalProfitPercent,
+    watchlist, priceChange5m, positionsMap, totalValue,
   } = useContext(PortfolioContext);
 
-  const [cryptos, setCryptos] = useState([]);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [sellModal, setSellModal] = useState(false);
+  // --- États modales ---
+  const [showBuy, setShowBuy] = useState(false);
+  const [buySymbol, setBuySymbol] = useState("");
+  const [buyAmount, setBuyAmount] = useState("");
+
+  const [showSell, setShowSell] = useState(false);
   const [sellSymbol, setSellSymbol] = useState("");
-  const [sellPrice, setSellPrice] = useState(0);
   const [sellPercent, setSellPercent] = useState(100);
-const [showDetails, setShowDetails] = useState(true);
-  const [top5Up, setTop5Up] = useState([]);
-  const [top5Down, setTop5Down] = useState([]);
-  const [updatedPrices, setUpdatedPrices] = useState({});
-  const [startDate, setStartDate] = useUserStorage("ptStartDate", new Date());
 
-  useEffect(() => {
-    setStartDate(startDate);
-  }, [startDate]);
+  // Positions adaptées pour la SellModal (attend "quantity" au lieu de "qty")
+  const positionsForModal = useMemo(
+    () => positions.map((p) => ({ ...p, quantity: p.qty })),
+    [positions]
+  );
 
-  const openSell = (symbol, price) => {
-    setSellSymbol(symbol);
-    setSellPrice(price);
-    setSellPercent(100);
-    setSellModal(true);
-  };
-
-  const confirmSell = () => {
-    const pos = positions?.find((p) => p.symbol === sellSymbol);
-    if (!pos) return;
-    const quantityToSell = (sellPercent / 100) * pos.quantity;
-    sellPosition(pos.id, quantityToSell, sellPrice);
-    setSellModal(false);
-  };
-
-  const handleBuy = (symbol, price) => {
-    const input = window.prompt(`Montant en USD à investir dans ${symbol} :`, "100");
-    const tp = window.prompt("Take Profit en % (0 = désactivé)", "0");
-    const sl = window.prompt("Stop Loss en % (0 = désactivé)", "0");
-
-    const amount = parseFloat(input);
-    const tpPercent = parseFloat(tp);
-    const slPercent = parseFloat(sl);
-
-    if (isNaN(amount) || amount <= 0 || isNaN(tpPercent) || isNaN(slPercent)) {
-      alert("Valeurs invalides.");
-      return;
-    }
-
-    if (amount > cash) {
-      alert("Fonds insuffisants !");
-      return;
-    }
-
-    if (window.confirm(`Confirmer achat de ${symbol} pour $${amount.toFixed(2)} (TP : ${tpPercent}%, SL : ${slPercent}%) ?`)) {
-      const quantity = amount / price;
-      buyPosition(symbol, quantity, price, tpPercent, slPercent);
-    }
-  };
-
-  const handleUpdatePrices = async () => {
-    const updateBtn = document.getElementById("update-btn");
-    if (updateBtn) {
-      updateBtn.classList.add("shake");
-      setTimeout(() => updateBtn.classList.remove("shake"), 500);
-    }
-
-    try {
-      const { top5Up, top5Down, rest } = await fetchPrices();
-      const now = new Date().toLocaleTimeString();
-      const merged = [...top5Up, ...top5Down, ...rest];
-      const unique = Array.from(new Map(merged.map(c => [c.symbol, c])).values());
-
-      const changed = {};
-      unique.forEach((c) => {
-        const prev = cryptos.find((p) => p.symbol === c.symbol);
-        if (prev && prev.currentPrice !== c.currentPrice) {
-          changed[c.symbol] = true;
-        }
+  // --- Tri top movers 5 min ---
+  const movers = useMemo(() => {
+    const rows = [];
+    for (const sym of Object.keys(priceChange5m)) {
+      rows.push({
+        symbol: sym,
+        change: priceChange5m[sym],
+        price: currentPrices[sym] ?? NaN,
       });
-      setUpdatedPrices(changed);
-
-      setCryptos(unique);
-      setTop5Up(top5Up);
-      setTop5Down(top5Down);
-      setLastUpdate(now);
-      updatePrices();
-    } catch (err) {
-      console.error("Erreur lors de la mise à jour :", err);
     }
+    rows.sort((a, b) => b.change - a.change);
+    const topGainers = rows.slice(0, 5);
+    const topLosers = rows.slice(-5).reverse();
+    return { topGainers, topLosers };
+  }, [priceChange5m, currentPrices]);
+
+  // --- Achat ---
+  const openBuy = (symbol) => {
+    setBuySymbol(symbol.toUpperCase());
+    setBuyAmount("");
+    setShowBuy(true);
+  };
+  const confirmBuy = async () => {
+    const amt = Number(buyAmount);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    await buyPosition(buySymbol, amt);
+    setShowBuy(false);
   };
 
+  // --- Vente ---
+  const openSell = (symbol) => {
+    setSellSymbol(symbol.toUpperCase());
+    setSellPercent(100);
+    setShowSell(true);
+  };
+  const confirmSell = async () => {
+    await sellPosition(sellSymbol, sellPercent);
+    setShowSell(false);
+  };
+
+  // --- Mise à jour de départ + toutes les 60s (soft) ---
   useEffect(() => {
-    handleUpdatePrices();
-    const interval = setInterval(handleUpdatePrices, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+    let stop = false;
+    const tick = async () => {
+      await updatePrices();
+      if (!stop) timer = setTimeout(tick, 60 * 1000);
+    };
+    let timer = setTimeout(tick, 250);
+    return () => { stop = true; clearTimeout(timer); };
+  }, [updatePrices]);
 
-  useEffect(() => {
-    positions.forEach((p) => {
-      const curr = currentPrices[p.symbol] ?? p.buyPrice;
-      if (!curr) return;
-      const tp = p.tpPercent || 0;
-      const sl = p.slPercent || 0;
-
-      if (tp > 0 && curr >= p.buyPrice * (1 + tp / 100)) {
-        sellPosition(p.id, p.quantity, curr);
-      } else if (sl > 0 && curr <= p.buyPrice * (1 - sl / 100)) {
-        sellPosition(p.id, p.quantity, curr);
-      }
-    });
-  }, [currentPrices]);
-
-  const knownOrder = ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOGE", "MATIC", "DOT"];
-  const sortedCryptos = useMemo(() => {
-    return [...cryptos].sort((a, b) => {
-      const ia = knownOrder.indexOf(a.symbol);
-      const ib = knownOrder.indexOf(b.symbol);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
-      return a.symbol.localeCompare(b.symbol);
-    });
-  }, [cryptos]);
-
-  const positionSummary = useMemo(() => {
-    const total = (positions ?? []).reduce((sum, p) => {
-      const curr = currentPrices?.[p.symbol] ?? p.buyPrice;
-      return sum + p.quantity * curr;
-    }, 0);
-    return { count: positions?.length ?? 0, value: total };
-  }, [positions, currentPrices]);
-
-  const handleChangePercent = (e) => setSellPercent(Number(e.target.value));
-  const handleSetMax = () => setSellPercent(100);
-  const handleCloseSell = () => setSellModal(false);
-
-  const renderCryptoBlock = (c) => {
-    const hasPosition = positions?.some((p) => p.symbol === c.symbol && p.quantity > 0);
-    const animate = updatedPrices[c.symbol];
-
+  // --- Helpers d'affichage ---
+  const hasOpenPosition = (sym) => !!positionsMap[(sym || "").toUpperCase()];
+  const rowActionBtn = (sym) => {
+    const symU = (sym || "").toUpperCase();
     return (
-      <div key={c.symbol} style={{
-        borderLeft: `6px solid ${c.change5min >= 0 ? "#0f0" : "#f00"}`,
-        backgroundColor: "rgba(30, 30, 30, 0.6)",
-        backdropFilter: "blur(8px)",
-        borderRadius: "8px",
-        padding: "1rem",
-        width: "100%",
-        boxSizing: "border-box"
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{c.symbol}</div>
-          <div className={animate ? "animate-price" : ""} style={{ color: "#ccc", fontSize: "1rem" }}>
-            ${c.currentPrice?.toFixed(4)}
-          </div>
-          <div style={{ fontSize: "0.9rem", color: "#ccc", lineHeight: "1.4" }}>
-            <span style={{ color: c.change5min >= 0 ? "lightgreen" : "salmon" }}>5m: {c.change5min?.toFixed(2)}%</span>{" | "}
-            <span style={{ color: c.change1d >= 0 ? "lightgreen" : "salmon" }}>1j: {c.change1d?.toFixed(2)}%</span>{" | "}
-            <span style={{ color: c.change7d >= 0 ? "lightgreen" : "salmon" }}>7j: {c.change7d?.toFixed(2)}%</span>
-          </div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem", flexWrap: "wrap", gap: "1rem" }}>
-          <button onClick={() => handleBuy(c.symbol, c.currentPrice)} style={{ padding: "6px 12px", backgroundColor: "#4ea8de", color: "#fff", border: "none", borderRadius: "4px" }}>ACHAT</button>
-          <button onClick={() => openSell(c.symbol, c.currentPrice)} disabled={!hasPosition} style={{ backgroundColor: hasPosition ? "#dc3545" : "#555", color: "#fff", padding: "6px 12px", border: "none", borderRadius: "4px" }}>VENTE</button>
-          <a href={`https://www.tradingview.com/symbols/${c.symbol}USD`} target="_blank" rel="noreferrer" style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none", alignSelf: "center" }}>→ TradingView</a>
-        </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={() => openBuy(symU)}
+          style={{ padding: "6px 10px", border: "none", borderRadius: 4, background: "#198754", color: "#fff", cursor: "pointer", fontWeight: 600 }}
+        >
+          ACHAT
+        </button>
+        {hasOpenPosition(symU) && (
+          <button
+            onClick={() => openSell(symU)}
+            style={{ padding: "6px 10px", border: "none", borderRadius: 4, background: "#dc3545", color: "#fff", cursor: "pointer", fontWeight: 600 }}
+          >
+            VENTE
+          </button>
+        )}
       </div>
     );
   };
 
+  // --- Table style ---
+  const tableWrapStyle = { overflowX: "auto", borderRadius: 8, border: "1px solid #2a2a2a" };
+  const tableStyle = { width: "100%", borderCollapse: "collapse", minWidth: 720, color: "#fff" };
+  const thStyle = { textAlign: "left", padding: "10px 12px", background: "#232323", position: "sticky", top: 0 };
+  const tdStyle = { padding: "10px 12px", borderTop: "1px solid #2a2a2a" };
+
   return (
-    <div style={{
-      backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundAttachment: 'fixed',
-      padding: "6rem 2rem 2rem",
-      minHeight: "100vh",
-      color: "#fff",
-      fontFamily: "sans-serif"
-    }}>
-      {/* sticky header */}
-      <div style={{
-        position: "sticky",
-        top: "0",
-        zIndex: 100,
-        backgroundColor: "rgba(0,0,0,0.6)",
-        backdropFilter: "blur(8px)",
-        padding: "1rem",
-        marginBottom: "2rem",
-        borderRadius: "6px"
-      }}>
-        <h1>💸 TradingVirtuel</h1>
-        <h2 style={{ marginTop: "-1rem", color: "#aaa" }}>
-          {portfolioName} | 🕒 Début : {new Date(startDate).toLocaleString()}
-        </h2>
-        <div style={{ marginTop: "1rem" }}>
-  <button
-    onClick={() => setShowDetails(!showDetails)}
-    style={{
-      marginBottom: "1rem",
-      padding: "6px 12px",
-      backgroundColor: "#444",
-      color: "#fff",
-      border: "none",
-      borderRadius: "4px",
-      cursor: "pointer"
-    }}
-  >
-    {showDetails ? "📦 Masquer les détails" : "🔍 Afficher les détails"}
-  </button>
-  <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
-    {showDetails && (
-      <>
-        <div>💼 Solde total : ${(cash + investedAmount).toFixed(2)}</div>
-        <div>💰 Cash disponible : ${cash.toFixed(2)}</div>
-        <div>📈 Investi : ${investedAmount.toFixed(2)}</div>
-        <div>📌 Positions placées : {positionSummary.count}</div>
-        <div>💎 Valeur actuelle : ${positionSummary.value.toFixed(2)}</div>
-      </>
-    )}
-    <div style={{
-      fontWeight: "bold",
-      fontSize: "1.1rem",
-      padding: "0.5rem 1rem",
-      backgroundColor: "#222",
-      borderRadius: "6px",
-      color: totalProfit >= 0 ? "lightgreen" : "salmon",
-      marginLeft: "auto"
-    }}>
-      📈 Rendement total : ${totalProfit.toFixed(2)} ({totalProfitPercent.toFixed(2)}%)
-    </div>
-  </div>
-</div>
-        <div style={{ marginTop: "1rem" }}>
-          <button id="update-btn" onClick={handleUpdatePrices} style={{
-            marginRight: "1rem",
-            padding: "10px 20px",
-            backgroundColor: "#007bff",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "1rem"
-          }}>
-            🔄 UPDATE PRICES NOW
-          </button>
-          {lastUpdate && (
-            <span style={{ fontSize: "0.9rem", color: "#ccc" }}>
-              Dernière mise à jour : {lastUpdate}
-            </span>
-          )}
+    <div
+      style={{
+        backgroundImage: 'url("/backgrounds/homebackground.png")',
+        backgroundSize: "cover",
+        backgroundAttachment: "fixed",
+        backgroundPosition: "center",
+        minHeight: "100vh",
+        padding: "6rem 1rem 2rem",
+        color: "#fff",
+        fontFamily: "Inter, system-ui, Avenir, Helvetica, Arial, sans-serif",
+      }}
+    >
+      {/* ==== [BLOC: EN-TÊTE & BILAN] ======================================= */}
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0 }}>Trading — <span style={{ color: "#9ecbff" }}>{portfolioName}</span></h2>
+        <button
+          onClick={updatePrices}
+          style={{ padding: "8px 12px", borderRadius: 6, background: "#0d6efd", border: "none", color: "#fff", cursor: "pointer" }}
+        >
+          UPDATE PRICES NOW
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: 16 }}>
+        <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+          <div style={{ color: "#999", fontSize: 12 }}>Solde total</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{fmtUSD(totalValue)}</div>
+        </div>
+        <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+          <div style={{ color: "#999", fontSize: 12 }}>Cash disponible</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{fmtUSD(cash)}</div>
+        </div>
+        <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+          <div style={{ color: "#999", fontSize: 12 }}>Investi (positions ouvertes)</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{fmtUSD(investedAmount)}</div>
+        </div>
+        <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+          <div style={{ color: "#999", fontSize: 12 }}>P&L global</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: totalProfit >= 0 ? "lightgreen" : "salmon" }}>
+            {fmtUSD(totalProfit)} ({fmtPct(totalProfitPercent)})
+          </div>
         </div>
       </div>
 
-      {/* Top hausses */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h3>📈 Top 5 hausses</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {top5Up.map(renderCryptoBlock)}
+      {/* ==== [BLOC: TOP MOVERS 5 MIN] ===================================== */}
+      <section style={{ marginTop: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Top 5 — 5 min</h3>
+        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
+          {/* Gainers */}
+          <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+            <h4 style={{ margin: "0 0 8px 0", color: "#7ee787" }}>Hausses</h4>
+            <div style={tableWrapStyle}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Crypto</th>
+                    <th style={thStyle}>Prix (USD)</th>
+                    <th style={thStyle}>Var 5m</th>
+                    <th style={thStyle}></th>
+                    <th style={thStyle}></th>
+                    <th style={thStyle}>TD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movers.topGainers.map((r) => {
+                    const sym = r.symbol.toUpperCase();
+                    const price = currentPrices[sym] ?? NaN;
+                    return (
+                      <tr key={`g_${sym}`}>
+                        <td style={tdStyle}><b>{sym}</b></td>
+                        <td style={tdStyle}>{fmtPrice(price)}</td>
+                        <td style={{ ...tdStyle, color: r.change >= 0 ? "lightgreen" : "salmon" }}>{fmtPct(r.change)}</td>
+                        <td style={tdStyle}>{rowActionBtn(sym)}</td>
+                        <td style={tdStyle}>{hasOpenPosition(sym) ? <span style={{ color: "#dc3545" }}>●</span> : <span style={{ color: "#888" }}>○</span>}</td>
+                        <td style={tdStyle}>
+                          <a href={`https://www.tradingview.com/symbols/${sym}USD`} target="_blank" rel="noreferrer" style={{ color: "#4ea8de", fontWeight: 700, textDecoration: "none" }}>→</a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Losers */}
+          <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+            <h4 style={{ margin: "0 0 8px 0", color: "#ff7b72" }}>Baisses</h4>
+            <div style={tableWrapStyle}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Crypto</th>
+                    <th style={thStyle}>Prix (USD)</th>
+                    <th style={thStyle}>Var 5m</th>
+                    <th style={thStyle}></th>
+                    <th style={thStyle}></th>
+                    <th style={thStyle}>TD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movers.topLosers.map((r) => {
+                    const sym = r.symbol.toUpperCase();
+                    const price = currentPrices[sym] ?? NaN;
+                    return (
+                      <tr key={`l_${sym}`}>
+                        <td style={tdStyle}><b>{sym}</b></td>
+                        <td style={tdStyle}>{fmtPrice(price)}</td>
+                        <td style={{ ...tdStyle, color: r.change >= 0 ? "lightgreen" : "salmon" }}>{fmtPct(r.change)}</td>
+                        <td style={tdStyle}>{rowActionBtn(sym)}</td>
+                        <td style={tdStyle}>{hasOpenPosition(sym) ? <span style={{ color: "#dc3545" }}>●</span> : <span style={{ color: "#888" }}>○</span>}</td>
+                        <td style={tdStyle}>
+                          <a href={`https://www.tradingview.com/symbols/${sym}USD`} target="_blank" rel="noreferrer" style={{ color: "#4ea8de", fontWeight: 700, textDecoration: "none" }}>→</a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Top baisses */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h3>📉 Top 5 baisses</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {top5Down.map(renderCryptoBlock)}
+      {/* ==== [BLOC: WATCHLIST] ============================================ */}
+      <section style={{ marginTop: 20 }}>
+        <h3 style={{ marginTop: 0 }}>Watchlist</h3>
+        <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Crypto</th>
+                  <th style={thStyle}>Prix (USD)</th>
+                  <th style={thStyle}>Var 5m</th>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}>TD</th>
+                </tr>
+              </thead>
+              <tbody>
+                {watchlist.map((sym) => {
+                  const s = (sym || "").toUpperCase();
+                  const price = currentPrices[s] ?? NaN;
+                  const chg = priceChange5m[s];
+                  return (
+                    <tr key={`w_${s}`}>
+                      <td style={tdStyle}><b>{s}</b></td>
+                      <td style={tdStyle}>{fmtPrice(price)}</td>
+                      <td style={{ ...tdStyle, color: typeof chg === "number" ? (chg >= 0 ? "lightgreen" : "salmon") : "#ddd" }}>
+                        {typeof chg === "number" ? fmtPct(chg) : "—"}
+                      </td>
+                      <td style={tdStyle}>{rowActionBtn(s)}</td>
+                      <td style={tdStyle}>{hasOpenPosition(s) ? <span style={{ color: "#dc3545" }}>●</span> : <span style={{ color: "#888" }}>○</span>}</td>
+                      <td style={tdStyle}>
+                        <a href={`https://www.tradingview.com/symbols/${s}USD`} target="_blank" rel="noreferrer" style={{ color: "#4ea8de", fontWeight: 700, textDecoration: "none" }}>→</a>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ color: "#9aa0a6", marginTop: 8, fontSize: 13 }}>
+            Astuce: le calcul des variations 5 minutes se base sur un snapshot interne actualisé automatiquement. Bouton <b>UPDATE PRICES NOW</b> pour rafraîchir immédiatement.
+          </p>
         </div>
-      </div>
+      </section>
 
-      {/* Autres cryptos */}
-      <h3>🧾 Autres cryptos</h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        {sortedCryptos.map(renderCryptoBlock)}
-      </div>
-
-      <SellModal
-        show={sellModal}
-        symbol={sellSymbol}
-        price={sellPrice}
-        percent={sellPercent}
-        positions={positions}
-        onChangePercent={handleChangePercent}
-        onSetMax={handleSetMax}
-        onClose={handleCloseSell}
-        onConfirm={confirmSell}
+      {/* ==== [BLOC: MODALES] ============================================== */}
+      <BuyModal
+        show={showBuy}
+        symbol={buySymbol}
+        amount={buyAmount}
+        onChangeAmount={setBuyAmount}
+        onClose={() => setShowBuy(false)}
+        onConfirm={confirmBuy}
       />
 
-      <style>{`
-        @keyframes shake {
-          0% { transform: translateX(0); }
-          20% { transform: translateX(-3px); }
-          40% { transform: translateX(3px); }
-          60% { transform: translateX(-2px); }
-          80% { transform: translateX(2px); }
-          100% { transform: translateX(0); }
-        }
-        .shake {
-          animation: shake 0.4s ease-in-out;
-        }
-        .animate-price {
-          animation: pulse 0.3s ease-in-out;
-        }
-        @keyframes pulse {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.08); }
-          100% { transform: scale(1); }
-        }
-      `}</style>
+      <SellModal
+        show={showSell}
+        symbol={sellSymbol}
+        price={currentPrices[(sellSymbol || "").toUpperCase()] ?? 0}
+        percent={sellPercent}
+        positions={positionsForModal}
+        onClose={() => setShowSell(false)}
+        onConfirm={confirmSell}
+        onChangePercent={(e) => setSellPercent(Number(e.target.value))}
+        onSetMax={() => setSellPercent(100)}
+      />
     </div>
   );
 };
 
 export default Trading;
+
+// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
+// - Intégration complète Top 5 hausses/baisses (5 min) directement dans Trading.jsx.
+// - Bouton "ACHAT" => modale d’achat (montant en USD), cohérent avec buyPosition(symbol, usdAmount).
+// - Bouton "VENTE" actif immédiatement si position ouverte (positionsMap), modale de vente existante utilisée.
+// - Bouton "UPDATE PRICES NOW" + rafraîchissement auto toutes les 60s.
+// - Tables scrollables horizontalement (overflowX:auto) pour éviter d’être tronquées.
+// - Affichages robustes (prix/%) avec formatters, état visuel ● position ouverte.
+// - Mappage pour SellModal (attend "quantity" → conversion depuis "qty").
+// - Annotations de blocs ajoutées pour modifications ciblées.
