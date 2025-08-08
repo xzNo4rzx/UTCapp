@@ -425,3 +425,4 @@ export const PortfolioProvider = ({ children }) => {
 // - Aucune dépendance au clic utilisateur pour voir des prix.
 // - Try/catch silencieux pour éviter des erreurs UI si l’API rate temporairement.
 // - Reste de la logique inchangée.
+export default IATraderContext;
