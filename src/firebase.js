@@ -3,7 +3,7 @@
 // ==== [BLOC: IMPORTS] =======================================================
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 
 // ==== [BLOC: CONFIG] ========================================================
 const firebaseConfig = {
@@ -37,7 +37,7 @@ if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "undefined" || firebaseC
 // ==== [BLOC: INIT] ==========================================================
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
 
 // ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
 // - Lecture exclusive via import.meta.env.VITE_* (obligatoire avec Vite).
