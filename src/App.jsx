@@ -1,4 +1,6 @@
 // src/App.jsx
+import TradingTiles from './pages/TradingTiles';
+import './styles/trading.css'
 import React, { useEffect, useState, useContext } from "react";
 import { Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
