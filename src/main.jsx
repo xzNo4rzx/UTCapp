@@ -1,5 +1,6 @@
 // src/main.jsx
 import React from "react";
+import { UserProvider } from "./context/UserContext.jsx";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import { BrowserRouter as Router } from "react-router-dom";
@@ -15,7 +16,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <PortfolioProvider>
           <IATraderProvider>
             <AdminProvider>
-              <App />
+              <UserProvider><App /></UserProvider>
             </AdminProvider>
           </IATraderProvider>
         </PortfolioProvider>
