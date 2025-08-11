@@ -1,4 +1,5 @@
-const API_BASE = ((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(/\/+$/,""));
+import { API_BASE_URL } from "./lib/config.js";
+const API_BASE = ((import.meta.env.VITE_API_BASE||"${API_BASE_URL}").replace(/\/+$/,""));
 
 const fetchSignals = async () => {
   try {

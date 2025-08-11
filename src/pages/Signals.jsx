@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../lib/config.js";
 import React, { useEffect, useState, useContext } from "react";
 import { fetchLatestSignals } from "../utils/firestoreSignals"; // 🔁 Firestore
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
@@ -29,7 +30,7 @@ const Signals = () => {
   // 🔁 Lecture logs serveur API (version JSON)
 const fetchLogLines = async () => {
   try {
-    const res = await fetch(((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(/\/+$/,""))+"/get-latest-signals");
+    const res = await fetch(((import.meta.env.VITE_API_BASE||"${API_BASE_URL}").replace(/\/+$/,""))+"/get-latest-signals");
     const json = await res.json();
     if (Array.isArray(json.log)) {
       setLogs(json.log.slice(-25).reverse());

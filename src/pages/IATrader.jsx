@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../lib/config.js";
 import React, { useEffect, useState, useContext } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import IATraderContext from "../context/IATraderContext";
@@ -30,7 +31,7 @@ const IATrader = () => {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const res = await fetch(((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(/\/+$/,""))+"/trader-log");
+        const res = await fetch(((import.meta.env.VITE_API_BASE||"${API_BASE_URL}").replace(/\/+$/,""))+"/trader-log");
         const text = await res.text();
         const lines = text.split("\n").filter(Boolean).slice(-50).reverse();
         setLogs(lines);

@@ -1,6 +1,6 @@
+import { API_BASE_URL } from "./config.js";
 import { getAuth } from "firebase/auth";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "https://utc-api.onrender.com";
 
 async function authHeaders() {
   const u = getAuth().currentUser;
@@ -32,4 +32,4 @@ export async function apiPost(path, body) {
   return res.json();
 }
 
-export const API_BASE_URL = API_BASE;
+

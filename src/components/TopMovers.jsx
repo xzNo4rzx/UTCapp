@@ -1,11 +1,10 @@
 // FICHIER: ~/Documents/utc-app-full/utc-app-full/src/components/TopMovers.jsx
 
-// ==== [BLOC: IMPORTS] =======================================================
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useMemo, useState, useEffect } from "react";
 import { PortfolioContext } from "../context/PortfolioContext";
 import SellModal from "./SellModal";
+import { apiGetTopMovers } from "../utils/api";
 
-// ==== [BLOC: HELPERS] =======================================================
 const fmtPct = (n) =>
   typeof n === "number" && Number.isFinite(n) ? `${n.toFixed(2)}%` : "—";
 const fmtPrice = (n) => {
@@ -15,7 +14,6 @@ const fmtPrice = (n) => {
   return n.toFixed(6);
 };
 
-// ==== [BLOC: MODALE ACHAT] ==================================================
 const BuyModal = ({ show, symbol, amount, onChangeAmount, onClose, onConfirm }) => {
   if (!show) return null;
   return (
@@ -41,17 +39,14 @@ const BuyModal = ({ show, symbol, amount, onChangeAmount, onClose, onConfirm }) 
   );
 };
 
-// ==== [BLOC: COMPOSANT PRINCIPAL] ===========================================
 const TopMovers = () => {
   const {
     currentPrices,
-    priceChange5m,
     positionsMap,
     buyPosition,
     sellPosition,
   } = useContext(PortfolioContext);
 
-  // --- États modales ---
   const [showBuy, setShowBuy] = useState(false);
   const [buySymbol, setBuySymbol] = useState("");
   const [buyAmount, setBuyAmount] = useState("");
@@ -60,7 +55,6 @@ const TopMovers = () => {
   const [sellSymbol, setSellSymbol] = useState("");
   const [sellPercent, setSellPercent] = useState(100);
 
-  // Adaptation des positions pour la SellModal (attend "quantity")
   const positionsForModal = useMemo(() => {
     const rows = [];
     for (const list of Object.values(positionsMap || {})) {
@@ -69,21 +63,43 @@ const TopMovers = () => {
     return rows;
   }, [positionsMap]);
 
-  // --- Calcul gainers/losers 5 min ---
-  const { topGainers, topLosers } = useMemo(() => {
-    const rows = Object.keys(priceChange5m || {}).map((sym) => ({
-      symbol: sym.toUpperCase(),
-      change: priceChange5m[sym],
-      price: currentPrices[sym] ?? NaN,
-    }));
-    rows.sort((a, b) => b.change - a.change);
-    return {
-      topGainers: rows.slice(0, 5),
-      topLosers: rows.slice(-5).reverse(),
-    };
-  }, [priceChange5m, currentPrices]);
+  const [topGainers, setTopGainers] = useState([]);
+  const [topLosers, setTopLosers] = useState([]);
+  const [lastTs, setLastTs] = useState(null);
+  const [loadErr, setLoadErr] = useState("");
 
-  // --- Actions ---
+  useEffect(() => {
+    let cancel = false;
+
+    const load = async () => {
+      try {
+        setLoadErr("");
+        const data = await apiGetTopMovers();
+        if (cancel) return;
+
+        const gainers = Array.isArray(data?.gainers) ? data.gainers : [];
+        const losers  = Array.isArray(data?.losers)  ? data.losers  : [];
+
+        setTopGainers(gainers);
+        setTopLosers(losers);
+        setLastTs(data?.lastComputedAt || null);
+
+        if ((gainers?.length ?? 0) === 0 && (losers?.length ?? 0) === 0) {
+          console.warn("[TopMovers] API ok mais listes vides:", data);
+        }
+      } catch (e) {
+        if (cancel) return;
+        setLoadErr("Top Movers indisponibles pour le moment.");
+        setTopGainers([]);
+        setTopLosers([]);
+      }
+    };
+
+    load();
+    const iv = setInterval(load, 60_000);
+    return () => { cancel = true; clearInterval(iv); };
+  }, []);
+
   const openBuy = (sym) => {
     setBuySymbol(sym.toUpperCase());
     setBuyAmount("");
@@ -106,7 +122,6 @@ const TopMovers = () => {
     setShowSell(false);
   };
 
-  // --- Helpers UI ---
   const hasOpen = (sym) => !!(positionsMap && positionsMap[(sym || "").toUpperCase()]);
   const tableWrapStyle = { overflowX: "auto", borderRadius: 8, border: "1px solid #2a2a2a" };
   const tableStyle = { width: "100%", borderCollapse: "collapse", minWidth: 620, color: "#fff" };
@@ -114,12 +129,21 @@ const TopMovers = () => {
   const tdStyle = { padding: "10px 12px", borderTop: "1px solid #2a2a2a" };
 
   const renderRows = (rows) =>
-    rows.map((r) => {
-      const sym = r.symbol.toUpperCase();
-      const price = currentPrices[sym] ?? NaN;
-      const chg = r.change;
+    rows.map((r, i) => {
+      const sym = String(r?.symbol || "").toUpperCase();
+
+      const price =
+        Number.isFinite(r?.price) ? r.price :
+        Number.isFinite(r?.currentPrice) ? r.currentPrice :
+        currentPrices[sym] ?? NaN;
+
+      const chg =
+        Number.isFinite(r?.change5m) ? r.change5m :
+        Number.isFinite(r?.change)   ? r.change   :
+        Number.isFinite(r?.chg)      ? r.chg      : null;
+
       return (
-        <tr key={sym}>
+        <tr key={`${sym}-${i}`} style={{ background: i % 2 ? "#222" : "#262626" }}>
           <td style={tdStyle}><b>{sym}</b></td>
           <td style={tdStyle}>{fmtPrice(price)}</td>
           <td style={{ ...tdStyle, color: typeof chg === "number" ? (chg >= 0 ? "lightgreen" : "salmon") : "#ddd" }}>
@@ -161,48 +185,60 @@ const TopMovers = () => {
     });
 
   return (
-    <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
-      {/* ==== [BLOC: GAINERS] ============================================== */}
-      <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
-        <h4 style={{ margin: "0 0 8px 0", color: "#7ee787" }}>Hausses — 5 min</h4>
-        <div style={tableWrapStyle}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Crypto</th>
-                <th style={thStyle}>Prix (USD)</th>
-                <th style={thStyle}>Var 5m</th>
-                <th style={thStyle}></th>
-                <th style={thStyle}></th>
-                <th style={thStyle}>TD</th>
-              </tr>
-            </thead>
-            <tbody>{renderRows(topGainers)}</tbody>
-          </table>
+    <div>
+      <div style={{ display: "flex", gap: 16, alignItems: "baseline", marginBottom: 10 }}>
+        <h2 style={{ margin: 0 }}>Top Movers (5m)</h2>
+        <span style={{ color: "#aaa", fontSize: 12 }}>
+          {lastTs ? `MAJ ${new Date(lastTs).toLocaleTimeString()}` : ""}
+        </span>
+      </div>
+
+      {loadErr ? (
+        <div style={{ background: "#2a2a2a", color: "#fff", padding: 10, borderRadius: 8, marginBottom: 12, border: "1px solid #3a3a3a" }}>
+          {loadErr}
+        </div>
+      ) : null}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+        <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+          <h4 style={{ margin: "0 0 8px 0", color: "#7ee787" }}>Hausses — 5 min</h4>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Crypto</th>
+                  <th style={thStyle}>Prix (USD)</th>
+                  <th style={thStyle}>Var 5m</th>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}>TD</th>
+                </tr>
+              </thead>
+              <tbody>{renderRows(topGainers)}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
+          <h4 style={{ margin: "0 0 8px 0", color: "#ff7b72" }}>Baisses — 5 min</h4>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Crypto</th>
+                  <th style={thStyle}>Prix (USD)</th>
+                  <th style={thStyle}>Var 5m</th>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}>TD</th>
+                </tr>
+              </thead>
+              <tbody>{renderRows(topLosers)}</tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* ==== [BLOC: LOSERS] =============================================== */}
-      <div style={{ background: "#1b1b1b", padding: 12, borderRadius: 8, border: "1px solid #2a2a2a" }}>
-        <h4 style={{ margin: "0 0 8px 0", color: "#ff7b72" }}>Baisses — 5 min</h4>
-        <div style={tableWrapStyle}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Crypto</th>
-                <th style={thStyle}>Prix (USD)</th>
-                <th style={thStyle}>Var 5m</th>
-                <th style={thStyle}></th>
-                <th style={thStyle}></th>
-                <th style={thStyle}>TD</th>
-              </tr>
-            </thead>
-            <tbody>{renderRows(topLosers)}</tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ==== [BLOC: MODALES] ============================================== */}
       <BuyModal
         show={showBuy}
         symbol={buySymbol}
@@ -228,10 +264,3 @@ const TopMovers = () => {
 };
 
 export default TopMovers;
-
-// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
-// - Refonte complète pour cohérence 100% Binance et PortfolioContext.
-// - Affiche Top 5 hausses / baisses sur 5 min (priceChange5m) avec prix courants.
-// - Boutons ACHAT (montant USD) / VENTE (SellModal) activés immédiat via positionsMap.
-// - Liens TradingView, indicateur ● si position ouverte, tables scrollables.
-// - Annotations de blocs ajoutées pour modifications ciblées.

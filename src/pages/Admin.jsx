@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../lib/config.js";
 import React, { useEffect, useState, useContext } from "react";
 const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
 import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
@@ -41,7 +42,7 @@ const Admin = () => {
     }
     setSending(true);
     try {
-      const res = await fetch(((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(/\/+$/,""))+"/send-manual-signal", {
+      const res = await fetch(((import.meta.env.VITE_API_BASE||"${API_BASE_URL}").replace(/\/+$/,""))+"/send-manual-signal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

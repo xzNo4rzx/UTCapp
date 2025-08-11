@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState, useEffect } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import { PortfolioContext } from "../context/PortfolioContext";
 import TopMovers from "../components/TopMovers";
 import "../styles/trading.css";
@@ -25,9 +25,16 @@ function Chip({ k, v }) {
     </div>
   );
 }
+
 function Row({ sym, price, deltas, hasPos, onBuy, onSell }) {
+  const d1 = deltas?.["1m"];
+  const glow =
+    Number.isFinite(d1) && d1 !== 0
+      ? (d1 > 0 ? "0 0 0 1px #17c964" : "0 0 0 1px #f31260")
+      : "none";
+
   return (
-    <li className="tr-row">
+    <li className="tr-row" style={{ boxShadow: `var(--glass-shadow), ${glow}` }}>
       <div className="tr-sym">
         <span className="code">{sym}</span>
         <a href={`https://www.tradingview.com/symbols/${sym}USD`} target="_blank" rel="noreferrer" className="pair">→ TV</a>
@@ -55,8 +62,6 @@ export default function Trading() {
     cash, positions, currentPrices, lastUpdated,
     buyPosition, sellPosition, resetPortfolio, updatePrices, getDeltas
   } = useContext(PortfolioContext);
-
-  useEffect(() => { updatePrices(); }, []);
 
   const symbols = useMemo(() => {
     const arr = Object.keys(currentPrices || {});
@@ -93,7 +98,7 @@ export default function Trading() {
 
   return (
     <div style={{ minHeight: "100vh", backgroundImage: 'url("/backgrounds/homebackground.png")', backgroundSize: "cover", backgroundPosition: "center" }}>
-      <div className="tr-wrap" style={{ paddingTop: "80px" }}>
+      <div className="tr-wrap" style={{ paddingTop: 72 }}>
         <div className="tr-header">
           <h2 style={{ margin: 0 }}>💸 Trading</h2>
         </div>
@@ -120,25 +125,19 @@ export default function Trading() {
           <TopMovers />
         </div>
 
-        {symbols.length === 0 ? (
-          <div style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.06)" }}>
-            Aucune donnée pour le moment. Clique sur “Mettre à jour” pour rafraîchir depuis l’API.
-          </div>
-        ) : (
-          <ul className="tr-list">
-            {symbols.map(sym => (
-              <Row
-                key={sym}
-                sym={sym}
-                price={currentPrices[sym]}
-                deltas={getDeltas(sym) || {}}
-                hasPos={positions.some(p => (p.symbol||"").toUpperCase()===sym && p.qty>0)}
-                onBuy={onBuy}
-                onSell={onSell}
-              />
-            ))}
-          </ul>
-        )}
+        <ul className="tr-list">
+          {symbols.map(sym => (
+            <Row
+              key={sym}
+              sym={sym}
+              price={currentPrices[sym]}
+              deltas={getDeltas(sym)}
+              hasPos={positions.some(p => (p.symbol||"").toUpperCase()===sym && p.qty>0)}
+              onBuy={onBuy}
+              onSell={onSell}
+            />
+          ))}
+        </ul>
 
         {sellSym && (
           <div style={{ position: "fixed", inset: 0, background: "#0009", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>

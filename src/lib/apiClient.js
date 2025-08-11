@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "./config.js";
 export async function apiFetch(path, { method = "GET", token, body } = {}) {
   const base = import.meta.env.VITE_API_BASE?.replace(/\/+$/,"") || "";
   const headers = { "Content-Type": "application/json" };
