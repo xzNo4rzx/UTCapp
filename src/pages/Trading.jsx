@@ -1,70 +1,53 @@
 // FICHIER: src/pages/Trading.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import "../styles/trading.css";
+import TopMovers from "../components/TopMovers.jsx";
 
-const API = import.meta.env.VITE_API_BASE_URL || "https://utc-api.onrender.com";
-
-const DEFAULT_SYMBOLS = [
-  "BTC","ETH","SOL","XRP","ADA","DOGE","SHIB","AVAX","TRX","DOT",
-  "MATIC","LTC","BCH","UNI","LINK","XLM","ATOM","ETC","FIL","APT",
-  "ARB","OP","NEAR","SUI","INJ","TWT","RUNE","PEPE","GMT","LDO",
-  "RNDR","FTM","EGLD","FLOW","GRT","IMX","STX","ENS","CRV","HBAR","CRO"
+const SYMBOLS = [
+  "BTC","ETH","SOL","XRP","ADA","DOGE","SHIB","AVAX","TRX","DOT","MATIC","LTC","BCH","UNI","LINK","XLM","ATOM","ETC","FIL",
+  "APT","ARB","OP","NEAR","SUI","INJ","TWT","RUNE","PEPE","GMT","LDO","RNDR","FTM","EGLD","FLOW","GRT","IMX","STX","ENS","CRV","HBAR","CRO"
 ];
 
-function usePrices(symbols) {
-  const [map, setMap] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-  const csv = useMemo(() => symbols.join(","), [symbols]);
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE || "").replace(/\/+$/,"");
 
-  async function fetchOnce() {
-    try {
-      const url = `${API}/prices?symbols=${encodeURIComponent(csv)}`;
-      const res = await fetch(url, { method: "GET" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setMap(data?.prices || {});
-      setErr("");
-    } catch (e) {
-      setErr(String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    fetchOnce();
-    const id = setInterval(fetchOnce, 10000);
-    return () => clearInterval(id);
-  }, [csv]);
-
-  return { map, loading, err };
+function formatUSD(v){
+  if(v == null || Number.isNaN(v)) return "—";
+  try{
+    return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(v);
+  }catch(e){ return `$${(+v).toFixed(2)}`; }
 }
 
-function VarChip({ k, v }) {
-  const cls = v == null ? "neutral" : v >= 0 ? "up" : "down";
-  const txt = v == null ? "—" : v >= 0 ? `+${v.toFixed(2)}%` : `${v.toFixed(2)}%`;
+function VarChip({k, v}){
+  let cls = "neutral";
+  if(typeof v === "number"){
+    if(v > 0) cls = "up";
+    else if(v < 0) cls = "down";
+  }
   return (
     <div className="tr-chip">
       <span className="k">{k}</span>
-      <span className={`v ${cls}`}>{txt}</span>
+      <span className={"v "+cls}>{typeof v==="number" ? `${v>0?"+":""}${v.toFixed(2)}%` : "—"}</span>
     </div>
   );
 }
 
-function Row({ symbol, price, loading }) {
-  const vars = { "1m": null, "5m": null, "10m": null, "1h": null, "6h": null, "1d": null, "7d": null };
+function Row({sym, price, loading}){
+  const pair = sym + "/USD";
   return (
     <li className="tr-row">
       <div className="tr-sym">
-        <span className="sym">{symbol}</span>
-        <span className="pair">/USDT</span>
+        <span>{sym}</span>
+        <span className="pair">{pair}</span>
       </div>
       <div className="tr-price">{price != null ? formatUSD(price) : loading ? "—" : "—"}</div>
       <div className="tr-vars">
-        {Object.entries(vars).map(([k, v]) => (
-          <VarChip key={k} k={k} v={v} />
-        ))}
+        <VarChip k="1m" v={null} />
+        <VarChip k="5m" v={null} />
+        <VarChip k="10m" v={null} />
+        <VarChip k="1h" v={null} />
+        <VarChip k="6h" v={null} />
+        <VarChip k="1d" v={null} />
+        <VarChip k="7d" v={null} />
       </div>
       <div className="tr-actions">
         <button className="tr-btn buy" disabled>Acheter</button>
@@ -74,38 +57,69 @@ function Row({ symbol, price, loading }) {
   );
 }
 
-function formatUSD(n) {
-  try {
-    if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-    if (n >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
-    return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
-  } catch {
-    return String(n);
-  }
-}
+export default function Trading(){
+  const [symbols] = useState(SYMBOLS);
+  const [map, setMap] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const csv = useMemo(()=> symbols.join(","), [symbols]);
 
-export default function Trading() {
-  const symbols = DEFAULT_SYMBOLS;
-  const { map, loading, err } = usePrices(symbols);
+  async function fetchOnce(){
+    setErr("");
+    try{
+      const res = await fetch(`${API_BASE}/prices?symbols=${encodeURIComponent(csv)}`);
+      if(!res.ok){
+        const text = await res.text();
+        throw new Error(`API ${res.status}: ${text.slice(0,180)}`);
+      }
+      const data = await res.json();
+      setMap(data?.prices || {});
+    }catch(e){
+      setErr(e.message || "fetch error");
+    }finally{
+      setLoading(false);
+    }
+  }
+
+  useEffect(()=>{
+    if(!API_BASE){ setLoading(false); return; }
+    fetchOnce();
+    const t = setInterval(fetchOnce, 15000);
+    return ()=> clearInterval(t);
+  }, [csv]);
+
+  const bgStyle = {
+    minHeight: "100vh",
+    backgroundImage: 'url("/backgrounds/homebackground.png")',
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundAttachment: "fixed"
+  };
 
   return (
-    <div className="tr-wrap">
-      <div className="tr-header">
-        <h2>Trading</h2>
-        <span className="tr-note">1 ligne par crypto, fond verre dépoli, variations 1m/5m/10m/1h/6h/1d/7d</span>
-      </div>
-
-      {err && (
-        <div style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,0,0,0.08)" }}>
-          Erreur chargement prix : {err}
+    <div style={bgStyle}>
+      <div className="tr-wrap">
+        <div className="tr-header">
+          <h1 style={{margin:"0 0 6px 0"}}>💸 Trading</h1>
+          <span className="tr-note">1 ligne par crypto • fond verre dépoli • variations 1m/5m/10m/1h/6h/1d/7d</span>
         </div>
-      )}
 
-      <ul className="tr-list">
-        {symbols.map((sym) => (
-          <Row key={sym} symbol={sym} price={map?.[sym]} loading={loading} />
-        ))}
-      </ul>
+        <div style={{margin:"10px 0 18px 0"}}>
+          <TopMovers/>
+        </div>
+
+        {err ? (
+          <div style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,0,0,0.08)" }}>
+            {err}
+          </div>
+        ) : null}
+
+        <ul className="tr-list">
+          {symbols.map(sym => (
+            <Row key={sym} sym={sym} price={map?.[sym]} loading={loading}/>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
