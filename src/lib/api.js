@@ -9,14 +9,16 @@ async function jget(url) {
   return r.json();
 }
 
-// Try a list of candidate URLs until one succeeds (HTTP 200)
+// Essaie une liste d'URLs; logue succès/échec et retourne la première qui répond.
 async function jgetFirst(urls, fallback = null) {
   let lastErr = null;
   for (const u of urls) {
     try {
       const data = await jget(u);
+      console.info("[api] OK:", u);
       return data;
     } catch (e) {
+      console.warn("[api] FAIL:", u, String(e));
       lastErr = e;
     }
   }
@@ -28,8 +30,8 @@ async function jgetFirst(urls, fallback = null) {
 export async function apiGetPrices(symbols = []) {
   const q = encodeURIComponent(symbols.join(","));
   return jgetFirst([
-    `${BASE}/prices?symbols=${q}`,
     `${BASE}/api/prices?symbols=${q}`,
+    `${BASE}/prices?symbols=${q}`,
   ], {});
 }
 
@@ -37,16 +39,16 @@ export async function apiGetDeltas(symbols = [], windows = ["1m","5m","10m","1h"
   const sym = encodeURIComponent(symbols.join(","));
   const win = encodeURIComponent(windows.join(","));
   return jgetFirst([
-    `${BASE}/deltas?symbols=${sym}&windows=${win}`,
     `${BASE}/api/deltas?symbols=${sym}&windows=${win}`,
-  ], {}); // return {} if none available (UI shows placeholders)
+    `${BASE}/deltas?symbols=${sym}&windows=${win}`,
+  ], {});
 }
 
 export async function apiGetTopMovers(window = "5m", limit = 5) {
   const w = encodeURIComponent(window);
   const l = encodeURIComponent(limit);
   return jgetFirst([
-    `${BASE}/top-movers?window=${w}&limit=${l}`,
     `${BASE}/api/top-movers?window=${w}&limit=${l}`,
+    `${BASE}/top-movers?window=${w}&limit=${l}`,
   ], { gainers: [], losers: [] });
 }
