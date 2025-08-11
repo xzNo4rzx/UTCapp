@@ -1,3 +1,4 @@
+// FICHIER: src/pages/Trading.jsx
 import React, { useContext, useMemo, useState } from "react";
 import { PortfolioContext } from "../context/PortfolioContext";
 import TopMovers from "../components/TopMovers";
@@ -26,9 +27,15 @@ function Chip({ k, v }) {
   );
 }
 function Row({ sym, price, deltas, hasPos, onBuy, onSell }) {
-  const clsBg = deltas["1m"] == null ? "" : deltas["1m"] > 0 ? "rgba(0,128,0,0.12)" : deltas["1m"] < 0 ? "rgba(255,0,0,0.12)" : "transparent";
+  // encart vert/rouge selon 1m
+  const oneMin = deltas?.["1m"];
+  const rowBg =
+    typeof oneMin === "number"
+      ? (oneMin > 0 ? "rgba(0,255,0,0.06)" : oneMin < 0 ? "rgba(255,0,0,0.06)" : "transparent")
+      : "transparent";
+
   return (
-    <li className="tr-row" style={{ outline: clsBg !== "transparent" ? "1px solid rgba(255,255,255,0.18)" : undefined, background: `linear-gradient(${clsBg}, ${clsBg}), var(--glass-bg)` }}>
+    <li className="tr-row" style={{ background: `linear-gradient(${rowBg}, ${rowBg})` }}>
       <div className="tr-sym">
         <span className="code">{sym}</span>
         <a href={`https://www.tradingview.com/symbols/${sym}USD`} target="_blank" rel="noreferrer" className="pair">→ TV</a>
@@ -90,14 +97,18 @@ export default function Trading() {
     setSellSym(null);
   }
 
-  const totalValueNow = useMemo(
-    () => positions.reduce((s,p)=>s+(p.qty*(currentPrices[(p.symbol||"").toUpperCase()]||0)), cash),
-    [positions, currentPrices, cash]
-  );
-
   return (
-    <div style={{ minHeight: "100vh", backgroundImage: 'url("/backgrounds/homebackground.png")', backgroundSize: "cover", backgroundPosition: "center", paddingTop: 72 }}>
-      <div className="tr-wrap">
+    <div
+      style={{
+        minHeight: "100vh",
+        backgroundImage: 'url("/backgrounds/homebackground.png")',
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
+      }}
+    >
+      <div className="tr-wrap" style={{ paddingTop: "108px" }}>
         <div className="tr-header">
           <h2 style={{ margin: 0 }}>💸 Trading</h2>
         </div>
@@ -107,7 +118,7 @@ export default function Trading() {
             Cash ${fmtUSD(cash)}
           </div>
           <div style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)" }}>
-            Valeur totale ${fmtUSD(totalValueNow)}
+            Valeur totale ${fmtUSD(positions.reduce((s,p)=>s+(p.qty*(currentPrices[(p.symbol||"").toUpperCase()]||0)), cash))}
           </div>
           <div style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)" }}>
             P&L %
@@ -117,7 +128,8 @@ export default function Trading() {
         </div>
 
         <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 10 }}>
-          Dernière mise à jour: {lastUpdated ? new Date(lastUpdated).toLocaleString() : "—"} • Variations 1m–7d côté serveur
+          Dernière mise à jour: {lastUpdated ? new Date(lastUpdated).toLocaleString() : "—"} •
+          &nbsp;Variations = *prix backend* vs *snapshot persistant* (1m–7j).
         </div>
 
         <div style={{ margin: "10px 0 18px 0" }}>
