@@ -18,7 +18,6 @@ async function jgetSafe(url, fallback) {
   }
 }
 
-export async function apiGetPrices(symbols = []) {
   const q = encodeURIComponent(symbols.join(","));
   return jget(`${API_BASE}/prices?symbols=${q}`);
 }
@@ -36,4 +35,8 @@ export async function apiGetTopMovers(window = "5m", limit = 5) {
   const w = encodeURIComponent(window);
   const l = encodeURIComponent(limit);
   return jgetSafe(`${API_BASE}/top-movers?window=${w}&limit=${l}`, { gainers: [], losers: [] });
+}
+export async function apiGetPrice(symbol = "") {
+  const s = encodeURIComponent(String(symbol).toUpperCase());
+  return jget(`${BASE}/price/${s}`);
 }
