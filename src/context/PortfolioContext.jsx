@@ -327,8 +327,12 @@ export const PortfolioProvider = ({ children }) => {
     setPositions([]);
   };
 
+  useEffect(() => {
+    updatePrices();
+    const iv = setInterval(updatePrices, 60000);
+    return () => clearInterval(iv);
+  }, []);
   const value = useMemo(
-  useEffect(() => { updatePrices(); const iv = setInterval(updatePrices, 60000); return () => clearInterval(iv); }, []);
     () => ({
       portfolioName,
       cash,
