@@ -1,51 +1,39 @@
-// FICHIER: ~/Documents/utc-app-full/src/utils/api.js
+// src/utils/api.js
+const rawA = import.meta.env.VITE_API_BASE;
+const rawB = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE = (rawA || rawB || "https://utc-api.onrender.com").replace(/\/+$/, "");
 
-// ==== [CONFIG] ==============================================================
-const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:8000").replace(/\/+$/, "");
-
-// ==== [HELPERS] =============================================================
-const toJson = async (res) => {
-  const ct = res.headers.get("content-type") || "";
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${res.statusText} ${text.slice(0, 180)}`);
-  }
-  if (!ct.toLowerCase().includes("application/json")) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Réponse non-JSON depuis ${res.url}: ${text.slice(0, 180)}`);
-  }
-  return res.json();
-};
-
-// ==== [CLIENT — PRIX & KLINES] ==============================================
-export async function apiGetPrice(symbol) {
-  const s = String(symbol || "").toUpperCase();
-  return toJson(await fetch(`${API_BASE}/price/${encodeURIComponent(s)}`));
+async function jget(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`API ${r.status} ${url}`);
+  return r.json();
 }
+
+async function jgetSafe(url, fallback) {
+  try {
+    return await jget(url);
+  } catch (e) {
+    if (String(e).includes("API 404 ")) return fallback;
+    throw e;
+  }
+}
+
 export async function apiGetPrices(symbols = []) {
-  const list = symbols.map((s) => String(s).toUpperCase()).join(",");
-  const url = `${API_BASE}/prices?symbols=${encodeURIComponent(list)}`;
-console.log("[API] GET", url);
-return toJson(await fetch(url));
-}
-export async function apiGetKlines(pair = "BTC/USDT", interval = "1m", limit = 120) {
-  const p = String(pair || "BTC/USDT").toUpperCase();
-  const url = `${API_BASE}/klines?symbol=${encodeURIComponent(p)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
-  return toJson(await fetch(url));
+  const q = encodeURIComponent(symbols.join(","));
+  return jget(`${API_BASE}/prices?symbols=${q}`);
 }
 
-// ==== [CLIENT — SIGNAUX & LOGS] =============================================
-export async function apiTickSignals() {
-  return toJson(await fetch(`${API_BASE}/utcapp/signals`));
-}
-export async function apiLatestSignals(limit = 100) {
-  return toJson(await fetch(`${API_BASE}/get-latest-signals?limit=${encodeURIComponent(limit)}`));
-}
-export async function apiGetTraderLog() {
-  return toJson(await fetch(`${API_BASE}/trader-log`));
+export async function apiGetDeltas(
+  symbols = [],
+  windows = ["1m","5m","10m","1h","6h","1d","7d"]
+) {
+  const sym = encodeURIComponent(symbols.join(","));
+  const win = encodeURIComponent(windows.join(","));
+  return jgetSafe(`${API_BASE}/deltas?symbols=${sym}&windows=${win}`, {});
 }
 
-// ==== [RÉSUMÉ DES CORRECTIONS] ==============================================
-// - Ajout apiGetTraderLog() -> /trader-log
-// - Remplacement /get-latest-signals par /get-latest-signals via apiLatestSignals()
-// - Tout passe par VITE_API_BASE (https://utc-api.onrender.com)
+export async function apiGetTopMovers(window = "5m", limit = 5) {
+  const w = encodeURIComponent(window);
+  const l = encodeURIComponent(limit);
+  return jgetSafe(`${API_BASE}/top-movers?window=${w}&limit=${l}`, { gainers: [], losers: [] });
+}
