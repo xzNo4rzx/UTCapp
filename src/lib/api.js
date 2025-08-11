@@ -1,35 +1,37 @@
+/* src/lib/api.js */
 import { API_BASE_URL } from "./config.js";
-import { getAuth } from "firebase/auth";
 
+const RAW = (import.meta.env.VITE_API_BASE || API_BASE_URL || "https://utc-api.onrender.com").trim();
+const BASE = RAW.replace(/\/+$/,"");
 
-async function authHeaders() {
-  const u = getAuth().currentUser;
-  if (!u) return {};
-  const tok = await u.getIdToken();
-  return { Authorization: `Bearer ${tok}` };
+async function jget(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`API ${r.status} ${url}`);
+  return r.json();
 }
 
-export async function apiGet(path) {
-  const h = await authHeaders();
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json", ...h },
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error(`API ${res.status} : ${await res.text()}`);
-  return res.json();
+async function jgetSafe(url, fallback) {
+  try {
+    return await jget(url);
+  } catch (e) {
+    if (String(e).includes("API 404")) return fallback;
+    throw e;
+  }
 }
 
-export async function apiPost(path, body) {
-  const h = await authHeaders();
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...h },
-    body: JSON.stringify(body || {}),
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error(`API ${res.status} : ${await res.text()}`);
-  return res.json();
+export async function apiGetPrices(symbols = []) {
+  const q = encodeURIComponent(symbols.join(","));
+  return jget(`${BASE}/prices?symbols=${q}`);
 }
 
+export async function apiGetDeltas(symbols = [], windows = ["1m","5m","10m","1h","6h","1d","7d"]) {
+  const sym = encodeURIComponent(symbols.join(","));
+  const win = encodeURIComponent(windows.join(","));
+  return jgetSafe(`${BASE}/deltas?symbols=${sym}&windows=${win}`, {});
+}
 
+export async function apiGetTopMovers(window = "5m", limit = 5) {
+  const w = encodeURIComponent(window);
+  const l = encodeURIComponent(limit);
+  return jgetSafe(`${BASE}/top-movers?window=${w}&limit=${l}`, { gainers: [], losers: [] });
+}
