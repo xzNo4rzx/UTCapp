@@ -1,6 +1,7 @@
+import { API_BASE_URL } from "./lib/config.js";
 import React, { useEffect, useState, useContext } from "react";
 
-const LOG_ENDPOINT = ((import.meta.env.VITE_API_BASE||"http://localhost:8000").replace(//+$/,"")) + "/trader-log";
+const LOG_ENDPOINT = ((import.meta.env.VITE_API_BASE||"${API_BASE_URL}").replace(//+$/,"")) + "/trader-log";
 
 const LogViewer = () => {
   const [logs, setLogs] = useState([]);

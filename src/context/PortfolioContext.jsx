@@ -1,17 +1,29 @@
 import React, { createContext, useEffect, useMemo, useState } from "react";
-import { apiGetPrices, apiGetDeltas } from "../utils/api";
+import { useAuth } from "./AuthContext";
+import { loadPortfolio, savePortfolio } from "../utils/firestorePortfolio";
+import { apiGetPrices } from "../utils/api";
+import { apiGetDeltas } from "../lib/api.js";
 
 export const PortfolioContext = createContext();
 
 const START_CASH = 10000;
+
 const DEFAULT_SYMBOLS = [
-  "BTC","ETH","SOL","XRP","ADA","DOGE","SHIB","AVAX","TRX","DOT","MATIC","LTC","BCH","UNI","LINK","XLM","ATOM","ETC","FIL","APT","ARB","OP","NEAR","SUI","INJ","TWT","RUNE","PEPE","GMT","LDO","RNDR","FTM","EGLD","FLOW","GRT","IMX","STX","ENS","CRV","HBAR","CRO"
+  "BTC","ETH","SOL","XRP","ADA","DOGE","SHIB","AVAX","TRX",
+  "DOT","MATIC","LTC","BCH","UNI","LINK","XLM","ATOM","ETC",
+  "FIL","APT","ARB","OP","NEAR","SUI","INJ","TWT","RUNE",
+  "PEPE","GMT","LDO","RNDR","FTM","EGLD","FLOW","GRT","IMX",
+  "STX","ENS","CRV","HBAR","CRO"
 ];
 
+const nowIso = () => new Date().toISOString();
+const ms = (min) => min * 60 * 1000;
 const round2 = (n) => Math.round(n * 100) / 100;
 const ensureNum = (v, fb = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
 
 export const PortfolioProvider = ({ children }) => {
+  const { user } = useAuth();
+
   const [portfolioName, setPortfolioName] = useState(() => {
     const d = new Date();
     const tag = `PT${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -58,65 +70,53 @@ export const PortfolioProvider = ({ children }) => {
   });
 
   const [currentPrices, setCurrentPrices] = useState({});
-  const [serverDeltas, setServerDeltas] = useState({}); // {SYM: {'1m': x, ...}}
   const [lastUpdated, setLastUpdated] = useState(null);
+
+  const [refSnapshot, setRefSnapshot] = useState({ ts: Date.now(), prices: {} });
+
+  const [deltasMap, setDeltasMap] = useState({});
+  const windows = ["1m","5m","10m","1h","6h","1d","7d"];
 
   useEffect(() => localStorage.setItem("pt_cash", String(cash)), [cash]);
   useEffect(() => localStorage.setItem("pt_positions", JSON.stringify(positions)), [positions]);
   useEffect(() => localStorage.setItem("pt_history", JSON.stringify(history)), [history]);
   useEffect(() => localStorage.setItem("pt_watchlist", JSON.stringify(watchlist)), [watchlist]);
 
-  const updatePrices = async () => {
-    const symbols = Array.from(
-      new Set([
-        ...watchlist.map((s) => (s || "").toUpperCase()),
-        ...positions.map((p) => (p.symbol || "").toUpperCase()),
-      ])
-    ).filter(Boolean);
-
-    if (!symbols.length) return;
-
-    try {
-      const [{ prices = {}, updatedAt: up1 }, { deltas = {}, updatedAt: up2 }] = await Promise.all([
-        apiGetPrices(symbols),
-        apiGetDeltas(symbols, ["1m","5m","10m","1h","6h","1d","7d"]),
-      ]);
-
-      const cleanPrices = {};
-      for (const k of Object.keys(prices)) {
-        const n = Number(prices[k]);
-        if (Number.isFinite(n)) cleanPrices[k.toUpperCase()] = n;
-      }
-
-      const cleanDeltas = {};
-      for (const k of Object.keys(deltas || {})) {
-        const m = deltas[k] || {};
-        const upK = k.toUpperCase();
-        cleanDeltas[upK] = {
-          "1m":  Number.isFinite(m["1m"])  ? m["1m"]  : null,
-          "5m":  Number.isFinite(m["5m"])  ? m["5m"]  : null,
-          "10m": Number.isFinite(m["10m"]) ? m["10m"] : null,
-          "1h":  Number.isFinite(m["1h"])  ? m["1h"]  : null,
-          "6h":  Number.isFinite(m["6h"])  ? m["6h"]  : null,
-          "1d":  Number.isFinite(m["1d"])  ? m["1d"]  : null,
-          "7d":  Number.isFinite(m["7d"])  ? m["7d"]  : null,
-        };
-      }
-
-      setCurrentPrices((prev) => ({ ...prev, ...cleanPrices }));
-      setServerDeltas((prev) => ({ ...prev, ...cleanDeltas }));
-      setLastUpdated(up2 || up1 || new Date().toISOString());
-    } catch {
-      // silencieux
-    }
-  };
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!user) return;
+      try {
+        const data = await loadPortfolio(user.uid);
+        if (data && mounted) {
+          if (data.portfolioName) setPortfolioName(data.portfolioName);
+          if (Number.isFinite(data.cash)) setCash(data.cash);
+          if (Array.isArray(data.positions)) setPositions(data.positions);
+          if (Array.isArray(data.history)) setHistory(data.history);
+          if (Array.isArray(data.watchlist) && data.watchlist.length) setWatchlist(data.watchlist);
+        }
+      } catch {}
+    };
+    load();
+    return () => (mounted = false);
+  }, [user]);
 
   useEffect(() => {
-    updatePrices();
-    const iv = setInterval(updatePrices, 60 * 1000);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchlist.length, positions.length]);
+    const save = async () => {
+      if (!user) return;
+      try {
+        await savePortfolio(user.uid, {
+          portfolioName,
+          cash,
+          positions,
+          history,
+          watchlist,
+          lastUpdated,
+        });
+      } catch {}
+    };
+    save();
+  }, [user, portfolioName, cash, positions, history, watchlist, lastUpdated]);
 
   const positionsMap = useMemo(() => {
     const map = {};
@@ -179,6 +179,7 @@ export const PortfolioProvider = ({ children }) => {
   const totalValue = useMemo(() => round2(cash + openPositionsValue), [cash, openPositionsValue]);
 
   const activePositionsCount = useMemo(() => positions.length, [positions]);
+
   const totalTrades = useMemo(() => {
     const buys = history.filter((h) => h.type === "BUY").length;
     const sells = history.filter((h) => h.type === "SELL").length;
@@ -189,15 +190,59 @@ export const PortfolioProvider = ({ children }) => {
     return history.filter((h) => h.type === "SELL" && ensureNum(h.pnlUSD, 0) > 0).length;
   }, [history]);
 
-  const getDeltas = (sym) => serverDeltas[(sym || "").toUpperCase()] || {
-    "1m": null, "5m": null, "10m": null, "1h": null, "6h": null, "1d": null, "7d": null,
-  };
-
   const priceChange5m = useMemo(() => {
     const out = {};
-    for (const k of Object.keys(serverDeltas)) out[k] = serverDeltas[k]?.["5m"] ?? null;
+    const ref = refSnapshot.prices || {};
+    for (const sym of Object.keys(currentPrices)) {
+      const cur = ensureNum(currentPrices[sym], NaN);
+      const base = ensureNum(ref[sym], NaN);
+      if (Number.isFinite(cur) && Number.isFinite(base) && base > 0) {
+        out[sym] = round2(((cur - base) / base) * 100);
+      }
+    }
     return out;
-  }, [serverDeltas]);
+  }, [currentPrices, refSnapshot]);
+
+  const updatePrices = async () => {
+    const symbols = Array.from(
+      new Set([
+        ...watchlist.map((s) => (s || "").toUpperCase()),
+        ...positions.map((p) => (p.symbol || "").toUpperCase()),
+      ])
+    ).filter(Boolean);
+    if (symbols.length === 0) return;
+
+    const fresh = await apiGetPrices(symbols).then(r => r.prices || {});
+    setCurrentPrices((prev) => ({ ...prev, ...fresh }));
+    setLastUpdated(new Date().toISOString());
+
+    if (!refSnapshot.ts || Date.now() - refSnapshot.ts >= ms(5)) {
+      setRefSnapshot({ ts: Date.now(), prices: { ...fresh } });
+    }
+
+    const deltas = await apiGetDeltas(symbols, windows).catch(() => ({}));
+    setDeltasMap((prev) => ({ ...prev, ...deltas }));
+  };
+
+  useEffect(() => {
+    let cancel = false;
+    const boot = async () => {
+      if (cancel) return;
+      await updatePrices();
+      if (cancel) return;
+    };
+    boot();
+    const iv = setInterval(() => updatePrices(), 60_000);
+    return () => { cancel = true; clearInterval(iv); };
+  }, []); // eslint-disable-line
+
+  const getDeltas = (sym) => {
+    const k = (sym || "").toUpperCase();
+    const base = deltasMap[k] || {};
+    const out = {};
+    for (const w of windows) out[w] = ensureNum(base[w], null);
+    return out;
+  };
 
   const buyPosition = async (symbol, usdAmount) => {
     symbol = (symbol || "").toUpperCase();
@@ -211,14 +256,27 @@ export const PortfolioProvider = ({ children }) => {
     const qty = round2(amountUSD / price);
     if (qty <= 0) return;
 
-    const atIso = new Date().toISOString();
+    const buyEvent = {
+      id: `BUY-${Date.now()}`,
+      type: "BUY",
+      symbol,
+      qty,
+      price,
+      at: nowIso(),
+    };
 
     setCash((c) => round2(c - amountUSD));
     setPositions((prev) => [
-      { id: `POS-${Date.now()}`, symbol, qty, buyPrice: price, buyAt: atIso },
+      {
+        id: `POS-${Date.now()}`,
+        symbol,
+        qty,
+        buyPrice: price,
+        buyAt: buyEvent.at,
+      },
       ...prev,
     ]);
-    setHistory((h) => [{ id: `BUY-${Date.now()}`, type: "BUY", symbol, qty, price, at: atIso }, ...h]);
+    setHistory((h) => [buyEvent, ...h]);
     setCurrentPrices((prev) => ({ ...prev, [symbol]: price }));
   };
 
@@ -231,14 +289,26 @@ export const PortfolioProvider = ({ children }) => {
     if (idx < 0) return;
 
     const pos = positions[idx];
-    const price = Number.isFinite(priceNow) ? priceNow : ensureNum(currentPrices[symbol], pos.buyPrice);
+    const market = Number.isFinite(priceNow) ? priceNow : ensureNum(currentPrices[symbol], pos.buyPrice);
+    const price = ensureNum(market, pos.buyPrice);
+
     const sellQty = percent >= 100 ? pos.qty : round2((ensureNum(pos.qty, 0) * percent) / 100);
     if (sellQty <= 0) return;
 
     const proceeds = round2(sellQty * price);
     const pnlUSD = round2((price - ensureNum(pos.buyPrice, 0)) * sellQty);
 
-    const atIso = new Date().toISOString();
+    const sellEvent = {
+      id: `SELL-${Date.now()}`,
+      type: "SELL",
+      symbol,
+      qty: sellQty,
+      price,
+      at: nowIso(),
+      pnlUSD,
+      pnlPct: ensureNum(pos.buyPrice, 0) > 0 ? round2(((price - pos.buyPrice) / pos.buyPrice) * 100) : 0,
+      buyPrice: pos.buyPrice,
+    };
 
     setCash((c) => round2(c + proceeds));
     setPositions((prev) => {
@@ -248,10 +318,7 @@ export const PortfolioProvider = ({ children }) => {
       else updated[idx] = { ...pos, qty: newQty };
       return updated;
     });
-    setHistory((h) => [
-      { id: `SELL-${Date.now()}`, type: "SELL", symbol, qty: sellQty, price, at: atIso, pnlUSD, pnlPct: ensureNum(pos.buyPrice, 0) > 0 ? round2(((price - pos.buyPrice) / pos.buyPrice) * 100) : 0, buyPrice: pos.buyPrice },
-      ...h,
-    ]);
+    setHistory((h) => [sellEvent, ...h]);
     setCurrentPrices((prev) => ({ ...prev, [symbol]: price }));
   };
 
@@ -261,6 +328,7 @@ export const PortfolioProvider = ({ children }) => {
   };
 
   const value = useMemo(
+  useEffect(() => { updatePrices(); const iv = setInterval(updatePrices, 60000); return () => clearInterval(iv); }, []);
     () => ({
       portfolioName,
       cash,
@@ -270,7 +338,6 @@ export const PortfolioProvider = ({ children }) => {
       currentPrices,
       lastUpdated,
       positionsMap,
-
       investedAmount,
       openPositionsValue,
       totalValue,
@@ -279,23 +346,34 @@ export const PortfolioProvider = ({ children }) => {
       activePositionsCount,
       totalTrades,
       positiveTrades,
-
-      getDeltas,
       priceChange5m,
-
       setWatchlist,
       updatePrices,
       buyPosition,
       sellPosition,
       resetPortfolio,
       setPortfolioName,
+      getDeltas,
     }),
     [
-      portfolioName, cash, positions, history, watchlist,
-      currentPrices, lastUpdated, positionsMap,
-      investedAmount, openPositionsValue, totalValue,
-      totalProfit, totalProfitPercent, activePositionsCount, totalTrades, positiveTrades,
-      getDeltas, priceChange5m,
+      portfolioName,
+      cash,
+      positions,
+      history,
+      watchlist,
+      currentPrices,
+      lastUpdated,
+      positionsMap,
+      investedAmount,
+      openPositionsValue,
+      totalValue,
+      totalProfit,
+      totalProfitPercent,
+      activePositionsCount,
+      totalTrades,
+      positiveTrades,
+      priceChange5m,
+      getDeltas,
     ]
   );
 
