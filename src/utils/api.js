@@ -23,10 +23,12 @@ export async function apiGetPrices(symbols = []) {
   return jget(`${API_BASE}/prices?symbols=${q}`);
 }
 
-export async function apiGetDeltas(
-  symbols = [],
-  windows = ["1m","5m","10m","1h","6h","1d","7d"]
-) {
+export async function apiGetPrice(symbol = "") {
+  const s = encodeURIComponent(String(symbol).toUpperCase());
+  return jget(`${API_BASE}/price/${s}`);
+}
+
+export async function apiGetDeltas(symbols = [], windows = ["1m","5m","10m","1h","6h","1d","7d"]) {
   const sym = encodeURIComponent(symbols.join(","));
   const win = encodeURIComponent(windows.join(","));
   return jgetSafe(`${API_BASE}/deltas?symbols=${sym}&windows=${win}`, {});
@@ -38,7 +40,21 @@ export async function apiGetTopMovers(window = "5m", limit = 5) {
   return jgetSafe(`${API_BASE}/top-movers?window=${w}&limit=${l}`, { gainers: [], losers: [] });
 }
 
-export async function apiGetPrice(symbol = "") {
+export async function apiGetKlines(symbol = "", interval = "1m", limit = 200) {
   const s = encodeURIComponent(String(symbol).toUpperCase());
-  return jget(`${API_BASE}/price/${s}`);
+  const i = encodeURIComponent(interval);
+  const l = encodeURIComponent(limit);
+  return jget(`${API_BASE}/klines?symbol=${s}&interval=${i}&limit=${l}`);
+}
+
+export async function apiTickSignals() {
+  return jgetSafe(`${API_BASE}/tick-signals`, { ok: false });
+}
+
+export async function apiLatestSignals() {
+  return jgetSafe(`${API_BASE}/get-latest-signals`, []);
+}
+
+export async function apiGetTraderLog() {
+  return jgetSafe(`${API_BASE}/trader-log`, []);
 }
