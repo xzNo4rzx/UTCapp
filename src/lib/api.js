@@ -1,8 +1,7 @@
-/* src/lib/api.js */
-import { API_BASE_URL } from "./config.js";
-
-const RAW = (import.meta.env.VITE_API_BASE || API_BASE_URL || "https://utc-api.onrender.com").trim();
-const BASE = RAW.replace(/\/+$/,"");
+// src/lib/api.js
+const RAW_A = import.meta.env.VITE_API_BASE;
+const RAW_B = import.meta.env.VITE_API_BASE_URL;
+const BASE = (RAW_A || RAW_B || "https://utc-api.onrender.com").replace(/\/+$/,"");
 
 async function jget(url) {
   const r = await fetch(url, { cache: "no-store" });
@@ -10,28 +9,44 @@ async function jget(url) {
   return r.json();
 }
 
-async function jgetSafe(url, fallback) {
-  try {
-    return await jget(url);
-  } catch (e) {
-    if (String(e).includes("API 404")) return fallback;
-    throw e;
+// Try a list of candidate URLs until one succeeds (HTTP 200)
+async function jgetFirst(urls, fallback = null) {
+  let lastErr = null;
+  for (const u of urls) {
+    try {
+      const data = await jget(u);
+      return data;
+    } catch (e) {
+      lastErr = e;
+    }
   }
+  if (fallback !== null) return fallback;
+  throw lastErr || new Error("All endpoints failed");
 }
 
+// ---------- PUBLIC ----------
 export async function apiGetPrices(symbols = []) {
   const q = encodeURIComponent(symbols.join(","));
-  return jget(`${BASE}/prices?symbols=${q}`);
+  return jgetFirst([
+    `${BASE}/prices?symbols=${q}`,
+    `${BASE}/api/prices?symbols=${q}`,
+  ], {});
 }
 
 export async function apiGetDeltas(symbols = [], windows = ["1m","5m","10m","1h","6h","1d","7d"]) {
   const sym = encodeURIComponent(symbols.join(","));
   const win = encodeURIComponent(windows.join(","));
-  return jgetSafe(`${BASE}/deltas?symbols=${sym}&windows=${win}`, {});
+  return jgetFirst([
+    `${BASE}/deltas?symbols=${sym}&windows=${win}`,
+    `${BASE}/api/deltas?symbols=${sym}&windows=${win}`,
+  ], {}); // return {} if none available (UI shows placeholders)
 }
 
 export async function apiGetTopMovers(window = "5m", limit = 5) {
   const w = encodeURIComponent(window);
   const l = encodeURIComponent(limit);
-  return jgetSafe(`${BASE}/top-movers?window=${w}&limit=${l}`, { gainers: [], losers: [] });
+  return jgetFirst([
+    `${BASE}/top-movers?window=${w}&limit=${l}`,
+    `${BASE}/api/top-movers?window=${w}&limit=${l}`,
+  ], { gainers: [], losers: [] });
 }
