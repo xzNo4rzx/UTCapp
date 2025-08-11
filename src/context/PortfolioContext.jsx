@@ -327,13 +327,16 @@ export const PortfolioProvider = ({ children }) => {
     setPositions([]);
   };
 
-  useEffect(() => {
+    useEffect(() => {
+    // 1er tick + refresh toutes 60s
     updatePrices();
     const iv = setInterval(updatePrices, 60000);
     return () => clearInterval(iv);
   }, []);
+
   const value = useMemo(
     () => ({
+      // ÉTATS
       portfolioName,
       cash,
       positions,
@@ -342,6 +345,8 @@ export const PortfolioProvider = ({ children }) => {
       currentPrices,
       lastUpdated,
       positionsMap,
+
+      // METRIQUES
       investedAmount,
       openPositionsValue,
       totalValue,
@@ -351,12 +356,16 @@ export const PortfolioProvider = ({ children }) => {
       totalTrades,
       positiveTrades,
       priceChange5m,
+
+      // ACTIONS
       setWatchlist,
       updatePrices,
       buyPosition,
       sellPosition,
       resetPortfolio,
       setPortfolioName,
+
+      // DELTAS (backend)
       getDeltas,
     }),
     [
