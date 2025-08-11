@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useMemo, useState, useEffect } from "react";
 import { PortfolioContext } from "../context/PortfolioContext";
 import TopMovers from "../components/TopMovers";
 import "../styles/trading.css";
@@ -56,6 +56,8 @@ export default function Trading() {
     buyPosition, sellPosition, resetPortfolio, updatePrices, getDeltas
   } = useContext(PortfolioContext);
 
+  useEffect(() => { updatePrices(); }, []);
+
   const symbols = useMemo(() => {
     const arr = Object.keys(currentPrices || {});
     arr.sort((a, b) => {
@@ -91,7 +93,7 @@ export default function Trading() {
 
   return (
     <div style={{ minHeight: "100vh", backgroundImage: 'url("/backgrounds/homebackground.png")', backgroundSize: "cover", backgroundPosition: "center" }}>
-      <div className="tr-wrap">
+      <div className="tr-wrap" style={{ paddingTop: "80px" }}>
         <div className="tr-header">
           <h2 style={{ margin: 0 }}>💸 Trading</h2>
         </div>
@@ -118,19 +120,25 @@ export default function Trading() {
           <TopMovers />
         </div>
 
-        <ul className="tr-list">
-          {symbols.map(sym => (
-            <Row
-              key={sym}
-              sym={sym}
-              price={currentPrices[sym]}
-              deltas={getDeltas(sym)}
-              hasPos={positions.some(p => (p.symbol||"").toUpperCase()===sym && p.qty>0)}
-              onBuy={onBuy}
-              onSell={onSell}
-            />
-          ))}
-        </ul>
+        {symbols.length === 0 ? (
+          <div style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.06)" }}>
+            Aucune donnée pour le moment. Clique sur “Mettre à jour” pour rafraîchir depuis l’API.
+          </div>
+        ) : (
+          <ul className="tr-list">
+            {symbols.map(sym => (
+              <Row
+                key={sym}
+                sym={sym}
+                price={currentPrices[sym]}
+                deltas={getDeltas(sym) || {}}
+                hasPos={positions.some(p => (p.symbol||"").toUpperCase()===sym && p.qty>0)}
+                onBuy={onBuy}
+                onSell={onSell}
+              />
+            ))}
+          </ul>
+        )}
 
         {sellSym && (
           <div style={{ position: "fixed", inset: 0, background: "#0009", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
