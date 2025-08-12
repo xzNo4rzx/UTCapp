@@ -42,3 +42,22 @@ export async function apiGetKlines({ symbol, interval = '1m', limit = 500, start
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
 }
+
+// --- Signals ---------------------------------------------------------------
+// /api/tick-signals?symbol=BTCUSDT&limit=100  -> [{ts, symbol, type, score, ...}, ...]
+export async function apiTickSignals({ symbol, limit = 100 } = {}) {
+  const base = String(symbol || '').toUpperCase();
+  const pair = base.endsWith('USDT') ? base : `${base}USDT`;
+  const qs = new URLSearchParams({ symbol: pair, limit: String(limit) }).toString();
+  const res = await fetch(`/api/tick-signals?${qs}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
+// /api/latest-signals?limit=50  -> [{ts, symbol, type, score, ...}, ...]
+export async function apiLatestSignals({ limit = 50 } = {}) {
+  const qs = new URLSearchParams({ limit: String(limit) }).toString();
+  const res = await fetch(`/api/latest-signals?${qs}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
