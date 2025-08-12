@@ -13,7 +13,7 @@ function u(path) {
 async function fetchJSON(url, options) {
   const full = u(url);
   console.log("📡 GET:", full);
-  const res = await fetch(full, options);
+  const res = await fetchJSON(full, options);
   const text = await res.text();
   let data;
   try {
