@@ -202,7 +202,7 @@ for (const sym of symbols) {
     }
   } catch(e) { console.error(e); }
 }
-      const parsed = {};
+// duplicate removed
       for (const k of Object.keys(prices)) {
         const v = Number(prices[k]);
         if (Number.isFinite(v)) parsed[up(k)] = v;
@@ -356,7 +356,7 @@ for (const sym of symbols) {
     }
   } catch(e) { console.error(e); }
 }
-    const parsed = {};
+// duplicate removed
     for (const k of Object.keys(prices)) {
       const v = Number(prices[k]);
       if (Number.isFinite(v)) parsed[up(k)] = v;
