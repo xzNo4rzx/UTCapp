@@ -1,5 +1,10 @@
 // ===== API BASE ==============================================================
-export const API_BASE =
+export const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
+if(!API_BASE){
+  console.error("[CONFIG] VITE_API_BASE manquant. Configure-le sur le service FRONT Render.");
+  throw new Error("VITE_API_BASE missing");
+}
+console.log("[API] Base:", API_BASE);
   (import.meta?.env?.VITE_API_BASE) ||
   (typeof window !== 'undefined' && window.__API_BASE__) ||
   '';
@@ -10,15 +15,24 @@ function u(path) {
 }
 
 // ===== fetch JSON robuste ====================================================
-async function fetchJSON(url, options) {
-  const full = u(url);
-  console.log("📡 GET:", full);
-  const res = await fetchJSON(full, options);
-  const text = await res.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
+async function fetchJSON(url, init){
+  const abs = /^https?:\/\//i.test(url);
+  const path = abs ? url : (url.startsWith("/") ? url : "/"+url);
+  const u = abs ? url : ``;
+  const res = await fetchJSON(u, init);
+  const ct = res.headers.get("content-type")||"";
+  if(!res.ok){
+    const text = await res.text().catch(()=>"");
+    console.error("[fetchJSON] HTTP", res.status, u, text?.slice?.(0,300));
+    throw new Error(`HTTP `);
+  }
+  if(!/application\/json/i.test(ct)){
+    const text = await res.text().catch(()=>"");
+    console.error("[fetchJSON] Non-JSON response", { url:u, ct, text:text?.slice?.(0,300) });
+    throw new Error("Invalid JSON response");
+  }
+  return res.json();
+} catch {
     console.error("❌ NON-JSON:", full, "\nStatus:", res.status, res.statusText, "\nBody:\n", text);
     throw new SyntaxError(`Non-JSON from ${full} (status ${res.status})`);
   }
