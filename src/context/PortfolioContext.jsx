@@ -1,6 +1,7 @@
 // FICHIER: src/context/PortfolioContext.jsx
 import React, { createContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext";
+import { apiGetPrices, apiGetKlines, API_BASE } from "../utils/api";
 import { apiGetPrices } from "../utils/api";
 import { db } from "../firebase";
 import {
