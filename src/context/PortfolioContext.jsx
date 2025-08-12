@@ -1,18 +1,21 @@
 // FICHIER: src/context/PortfolioContext.jsx
-
-// ==== [BLOC: IMPORTS] =======================================================
 import React, { createContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext";
-import { loadPortfolio, savePortfolio } from "../utils/firestorePortfolio";
 import { apiGetPrices } from "../utils/api";
+import { db } from "../firebase";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+} from "firebase/firestore";
 
-// ==== [BLOC: CONTEXTE] ======================================================
+// ====== CONSTANTES ===========================================================
 export const PortfolioContext = createContext();
-
-// ==== [BLOC: CONSTANTES GLOBALES] ===========================================
 const START_CASH = 10000;
 
-// Liste de suivi par défaut (peut être étendue par la suite)
+// Liste de suivi par défaut (mêmes tickers que le projet)
 const DEFAULT_SYMBOLS = [
   "BTC","ETH","SOL","XRP","ADA","DOGE","SHIB","AVAX","TRX",
   "DOT","MATIC","LTC","BCH","UNI","LINK","XLM","ATOM","ETC",
@@ -22,163 +25,105 @@ const DEFAULT_SYMBOLS = [
 ];
 
 // Fenêtres d’analyse demandées
-const WINDOWS = {
-  "1m": 60 * 1000,
-  "5m": 5 * 60 * 1000,
-  "10m": 10 * 60 * 1000,
-  "1h": 60 * 60 * 1000,
-  "6h": 6 * 60 * 60 * 1000,
-  "1d": 24 * 60 * 60 * 1000,
-  "7d": 7 * 24 * 60 * 60 * 1000,
-};
+const WINDOWS = ["1m","5m","10m","1h","6h","1d","7d"];
 
-// ==== [BLOC: UTILS] =========================================================
-const nowIso   = () => new Date().toISOString();
-const round2   = (n) => Math.round(n * 100) / 100;
-const ensure   = (v, fb = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
-const clampPos = (n) => (Number.isFinite(n) && n > 0 ? n : 0);
+// Utils
+const nowIso = () => new Date().toISOString();
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const ensureNum = (v, fb = 0) => (Number.isFinite(v) ? v : fb);
+const up = (s) => String(s || "").toUpperCase();
 
-// Trouver le snapshot le plus proche <= target
-function findSnapshotAtOrBefore(snapshots, targetTs) {
-  // snapshots triés par ts croissant
-  let best = null;
-  for (let i = snapshots.length - 1; i >= 0; i--) {
-    const s = snapshots[i];
-    if (s.ts <= targetTs) { best = s; break; }
-  }
-  return best;
+// ====== DOC FIRESTORE PAR DEFAUT ============================================
+function defaultPortfolioDoc() {
+  return {
+    portfolioName: `PT${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, "0")}-001`,
+    cash: START_CASH,
+    positions: [],                 // [{id, symbol, qty, buyPrice, buyAt}]
+    history: [],                   // [{id, type: 'BUY'|'SELL', symbol, qty, price, at, pnlUSD?, pnlPct?, buyPrice?}]
+    watchlist: DEFAULT_SYMBOLS,
+    lastUpdated: null,             // ISO
+    // Référence de snapshot COMMUNE (partagée par le même compte entre tous les devices)
+    // stockée côté serveur pour que tout le monde ait les mêmes deltas.
+    snapRef: {
+      ts: null,                    // timestamp ms de calcul de la ref
+      prices: {}                   // {SYM: priceRef}
+    }
+  };
 }
 
-// ==== [BLOC: PROVIDER] ======================================================
+// ====== PROVIDER ============================================================
 export const PortfolioProvider = ({ children }) => {
   const { user } = useAuth();
 
-  // ---- États persistés (localStorage + Firestore) ---------------------------
-  const [portfolioName, setPortfolioName] = useState(() => {
-    const d = new Date();
-    const tag = `PT${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const n = Number(localStorage.getItem("ptCounter") || "1");
-    const name = `${tag}-${String(n).padStart(3, "0")}`;
-    if (!localStorage.getItem("portfolioName")) {
-      localStorage.setItem("portfolioName", name);
-      localStorage.setItem("ptCounter", String(n + 1));
-    }
-    return localStorage.getItem("portfolioName") || name;
-  });
+  // Etats “live” client (issus du serveur + API prix)
+  const [portfolioName, setPortfolioName] = useState("");
+  const [cash, setCash]                   = useState(START_CASH);
+  const [positions, setPositions]         = useState([]);       // tableau d'objets position
+  const [history, setHistory]             = useState([]);
+  const [watchlist, setWatchlist]         = useState(DEFAULT_SYMBOLS);
+  const [snapRef, setSnapRef]             = useState({ ts: null, prices: {} });
 
-  const [cash, setCash] = useState(() => {
-    const v = Number(localStorage.getItem("pt_cash"));
-    return Number.isFinite(v) && v >= 0 ? v : START_CASH;
-  });
+  const [currentPrices, setCurrentPrices] = useState({});       // {SYM: price} (API)
+  const [lastUpdated, setLastUpdated]     = useState(null);     // ISO
 
-  const [positions, setPositions] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("pt_positions")) || []; }
-    catch { return []; }
-  });
-
-  const [history, setHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("pt_history")) || []; }
-    catch { return []; }
-  });
-
-  const [watchlist, setWatchlist] = useState(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem("pt_watchlist") || "null");
-      return Array.isArray(raw) && raw.length ? raw : DEFAULT_SYMBOLS;
-    } catch {
-      return DEFAULT_SYMBOLS;
-    }
-  });
-
-  // ---- États non persistés --------------------------------------------------
-  const [currentPrices, setCurrentPrices] = useState({}); // {SYM: price}
-  const [lastUpdated, setLastUpdated] = useState(null);
-
-  // Historique persistant des snapshots → permet de recomposer les deltas à froid
-  const [snapshots, setSnapshots] = useState(() => {
-    try {
-      const arr = JSON.parse(localStorage.getItem("pt_snapshots") || "[]");
-      // garde la structure [{ts:number, prices:{SYM:price}}]
-      return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Persistences locales simples
-  useEffect(() => localStorage.setItem("pt_cash", String(cash)), [cash]);
-  useEffect(() => localStorage.setItem("pt_positions", JSON.stringify(positions)), [positions]);
-  useEffect(() => localStorage.setItem("pt_history", JSON.stringify(history)), [history]);
-  useEffect(() => localStorage.setItem("pt_watchlist", JSON.stringify(watchlist)), [watchlist]);
-  useEffect(() => localStorage.setItem("pt_snapshots", JSON.stringify(snapshots)), [snapshots]);
-
-  // ---- Firestore sync (best-effort) ----------------------------------------
+  // ---- Subscription Firestore (source de vérité unique) --------------------
   useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      if (!user) return;
-      try {
-        const data = await loadPortfolio(user.uid);
-        if (data && mounted) {
-          if (data.portfolioName) setPortfolioName(data.portfolioName);
-          if (Number.isFinite(data.cash)) setCash(data.cash);
-          if (Array.isArray(data.positions)) setPositions(data.positions);
-          if (Array.isArray(data.history)) setHistory(data.history);
-          if (Array.isArray(data.watchlist) && data.watchlist.length) setWatchlist(data.watchlist);
-          // on ne synchronise pas snapshots en Firestore par design (local-only UI cache)
-        }
-      } catch {
-        // silencieux
+    if (!user?.uid) return;
+    const ref = doc(db, "portfolios", user.uid);
+
+    let unsub = () => {};
+    (async () => {
+      // Crée le doc si absent
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        await setDoc(ref, defaultPortfolioDoc(), { merge: true });
       }
-    };
-    load();
-    return () => (mounted = false);
+      // Ecoute temps réel
+      unsub = onSnapshot(ref, (d) => {
+        const data = d.data() || {};
+        setPortfolioName(data.portfolioName || "");
+        setCash(ensureNum(data.cash, START_CASH));
+        setPositions(Array.isArray(data.positions) ? data.positions : []);
+        setHistory(Array.isArray(data.history) ? data.history : []);
+        setWatchlist(Array.isArray(data.watchlist) && data.watchlist.length ? data.watchlist : DEFAULT_SYMBOLS);
+        setLastUpdated(data.lastUpdated || null);
+        setSnapRef({
+          ts: data.snapRef?.ts ?? null,
+          prices: data.snapRef?.prices ?? {},
+        });
+      });
+    })();
+
+    return () => unsub();
   }, [user]);
 
-  useEffect(() => {
-    const save = async () => {
-      if (!user) return;
-      try {
-        await savePortfolio(user.uid, {
-          portfolioName,
-          cash,
-          positions,
-          history,
-          watchlist,
-          lastUpdated,
-        });
-      } catch {
-        // silencieux
-      }
-    };
-    save();
-  }, [user, portfolioName, cash, positions, history, watchlist, lastUpdated]);
-
-  // ==== [BLOC: POSITIONS MAP] ===============================================
+  // ---- Positions map (par symbole) -----------------------------------------
   const positionsMap = useMemo(() => {
     const map = {};
     for (const p of positions) {
-      const k = (p.symbol || "").toUpperCase();
+      const k = up(p.symbol);
       if (!map[k]) map[k] = [];
       map[k].push(p);
     }
     return map;
   }, [positions]);
 
-  // ==== [BLOC: METRIQUES & P&L] =============================================
+  // ---- Métriques ------------------------------------------------------------
   const openPositionsValue = useMemo(() => {
     let total = 0;
     for (const p of positions) {
-      const sym   = (p.symbol || "").toUpperCase();
-      const price = ensure(currentPrices[sym], p.buyPrice);
-      total += ensure(p.qty, 0) * ensure(price, 0);
+      const sym = up(p.symbol);
+      const px  = ensureNum(currentPrices[sym], p.buyPrice);
+      total += ensureNum(p.qty, 0) * ensureNum(px, 0);
     }
     return round2(total);
   }, [positions, currentPrices]);
 
   const investedAmount = useMemo(() => {
     let total = 0;
-    for (const p of positions) total += ensure(p.qty, 0) * ensure(p.buyPrice, 0);
+    for (const p of positions) {
+      total += ensureNum(p.qty, 0) * ensureNum(p.buyPrice, 0);
+    }
     return round2(total);
   }, [positions]);
 
@@ -186,8 +131,8 @@ export const PortfolioProvider = ({ children }) => {
     let acc = 0;
     for (const h of history) {
       if (h.type === "SELL") {
-        if (typeof h.pnlUSD === "number") acc += h.pnlUSD;
-        else if (typeof h.price === "number" && typeof h.qty === "number" && typeof h.buyPrice === "number") {
+        if (Number.isFinite(h.pnlUSD)) acc += h.pnlUSD;
+        else if (Number.isFinite(h.price) && Number.isFinite(h.qty) && Number.isFinite(h.buyPrice)) {
           acc += (h.price - h.buyPrice) * h.qty;
         }
       }
@@ -198,122 +143,85 @@ export const PortfolioProvider = ({ children }) => {
   const unrealizedProfit = useMemo(() => {
     let acc = 0;
     for (const p of positions) {
-      const sym   = (p.symbol || "").toUpperCase();
-      const price = ensure(currentPrices[sym], p.buyPrice);
-      acc += (ensure(price, 0) - ensure(p.buyPrice, 0)) * ensure(p.qty, 0);
+      const sym = up(p.symbol);
+      const px  = ensureNum(currentPrices[sym], p.buyPrice);
+      acc += (ensureNum(px, 0) - ensureNum(p.buyPrice, 0)) * ensureNum(p.qty, 0);
     }
     return round2(acc);
   }, [positions, currentPrices]);
 
-  const totalProfit = useMemo(
-    () => round2(realizedProfit + unrealizedProfit),
-    [realizedProfit, unrealizedProfit]
-  );
+  const totalProfit        = useMemo(() => round2(realizedProfit + unrealizedProfit), [realizedProfit, unrealizedProfit]);
+  const totalValue         = useMemo(() => round2(cash + openPositionsValue), [cash, openPositionsValue]);
+  const totalProfitPercent = useMemo(() => round2(((totalValue - START_CASH) / START_CASH) * 100), [totalValue]);
 
-  const totalProfitPercent = useMemo(() => {
-    const initial = START_CASH;
-    const currentTotal = cash + openPositionsValue;
-    const perf = ((currentTotal - initial) / initial) * 100;
-    return round2(perf);
-  }, [cash, openPositionsValue]);
-
-  const totalValue = useMemo(() => round2(cash + openPositionsValue), [cash, openPositionsValue]);
   const activePositionsCount = useMemo(() => positions.length, [positions]);
-
   const totalTrades = useMemo(() => {
-    const buys  = history.filter((h) => h.type === "BUY").length;
-    const sells = history.filter((h) => h.type === "SELL").length;
+    const buys = history.filter(h => h.type === "BUY").length;
+    const sells = history.filter(h => h.type === "SELL").length;
     return Math.min(buys, sells);
   }, [history]);
 
-  const positiveTrades = useMemo(
-    () => history.filter((h) => h.type === "SELL" && ensure(h.pnlUSD, 0) > 0).length,
-    [history]
-  );
+  const positiveTrades = useMemo(() => history.filter(h => h.type === "SELL" && ensureNum(h.pnlUSD, 0) > 0).length, [history]);
 
-  // ==== [BLOC: FETCH PRIX + SNAPSHOTS] ======================================
-  const updatePrices = async () => {
-    // Symbols = watchlist + positions
-    const symbols = Array.from(
-      new Set([
-        ...watchlist.map((s) => (s || "").toUpperCase()),
-        ...positions.map((p) => (p.symbol || "").toUpperCase()),
-      ])
-    ).filter(Boolean);
-
-    if (!symbols.length) return;
-
-    // 1) prix courants via backend
-    const { prices: freshMap = {} } = await apiGetPrices(symbols);
-    if (Object.keys(freshMap).length) {
-      setCurrentPrices((prev) => ({ ...prev, ...freshMap }));
-      setLastUpdated(new Date().toISOString());
-    }
-
-    // 2) snapshot persistant (pour recomposer deltas au reload)
-    const snap = { ts: Date.now(), prices: freshMap };
-    setSnapshots((prev) => {
-      const next = [...prev, snap];
-      // prune: garde 7j d’historique + borne max ~ 2000 snapshots (≈ 2/jour si 1min → OK)
-      const sevenDaysAgo = Date.now() - WINDOWS["7d"];
-      const pruned = next.filter((s) => s.ts >= sevenDaysAgo);
-      return pruned.slice(-2000);
-    });
-  };
-
-  // Auto-refresh 1 min + first load
-  useEffect(() => {
-    updatePrices();
-    const iv = setInterval(updatePrices, 60_000);
-    return () => clearInterval(iv);
-  }, []); // eslint-disable-line
-
-  // ==== [BLOC: DELTAS CALC – LOCAL FALLBACK] ================================
-  // Retourne un objet { "1m": x, "5m": y, ... } en % basé sur snapshots persistés.
+  // ---- DELTAS à partir de la ref partagée snapRef --------------------------
+  // getDeltas(sym) => { "1m": x, "5m": y, ... } basé sur snapRef.prices[sym] vs currentPrices[sym]
+  // NB: tant que le backend /deltas n’est pas disponible, on s’aligne au moins
+  //     sur une même ref pour tous les devices (snapRef en Firestore).
   const getDeltas = (symbol) => {
-    const sym = String(symbol || "").toUpperCase();
-    const cur = ensure(currentPrices[sym], NaN);
-    if (!Number.isFinite(cur) || cur <= 0) {
-      // pas de prix actuel fiable
-      return {
-        "1m": null, "5m": null, "10m": null,
-        "1h": null, "6h": null, "1d": null, "7d": null,
-      };
+    const sym = up(symbol);
+    const cur = ensureNum(currentPrices[sym], NaN);
+    const base = ensureNum(snapRef.prices?.[sym], NaN);
+    // Si pas de ref commune, affiche des tirets (évite divergences per‑device)
+    if (!Number.isFinite(cur) || !Number.isFinite(base) || base <= 0) {
+      return { "1m": null, "5m": null, "10m": null, "1h": null, "6h": null, "1d": null, "7d": null };
     }
-
-    const now = Date.now();
-    const out = {};
-    for (const [label, dur] of Object.entries(WINDOWS)) {
-      const target = now - dur;
-      const snap = findSnapshotAtOrBefore(snapshots, target);
-      const base = snap?.prices?.[sym];
-      if (Number.isFinite(base) && base > 0) {
-        out[label] = round2(((cur - base) / base) * 100);
-      } else {
-        out[label] = null;
-      }
-    }
-    return out;
+    // En attendant les fenêtres multiples serveur, on applique la même ref “commune”.
+    const pct = round2(((cur - base) / base) * 100);
+    return { "1m": pct, "5m": pct, "10m": pct, "1h": pct, "6h": pct, "1d": pct, "7d": pct };
   };
 
-  // Dérivé “5m” conservé pour compat (TopMovers si jamais il l’utilise)
-  const priceChange5m = useMemo(() => {
-    const out = {};
-    for (const sym of Object.keys(currentPrices)) {
-      const d = getDeltas(sym)["5m"];
-      if (d != null) out[sym] = d;
+  // ---- MAJ DES PRIX (backend) ----------------------------------------------
+  const updatePrices = async () => {
+    try {
+      const symbols = Array.from(new Set([
+        ...watchlist.map(up),
+        ...positions.map(p => up(p.symbol)),
+      ])).filter(Boolean);
+
+      if (!symbols.length) return;
+
+      // Appel backend
+      const { prices = {} } = await apiGetPrices(symbols);
+      const parsed = {};
+      for (const k of Object.keys(prices)) {
+        const v = Number(prices[k]);
+        if (Number.isFinite(v)) parsed[up(k)] = v;
+      }
+
+      setCurrentPrices(prev => ({ ...prev, ...parsed }));
+      const iso = nowIso();
+      setLastUpdated(iso);
+
+      // on persiste uniquement la date côté serveur (les prix restent un flux volatile côté client)
+      if (user?.uid) {
+        await updateDoc(doc(db, "portfolios", user.uid), { lastUpdated: iso });
+      }
+    } catch (e) {
+      // silencieux console
+      // console.error("[updatePrices] fail:", e);
     }
-    return out;
-  }, [currentPrices, snapshots]);
+  };
 
-  // ==== [BLOC: ACHAT / VENTE] ===============================================
+  // ---- ACHAT / VENTE (écritures Firestore) ---------------------------------
   const buyPosition = async (symbol, usdAmount) => {
-    const sym = (symbol || "").toUpperCase();
-    const amountUSD = round2(ensure(usdAmount, 0));
+    if (!user?.uid) return;
+    const sym = up(symbol);
+    const amountUSD = round2(ensureNum(usdAmount, 0));
     if (amountUSD <= 0) return;
-    if (amountUSD > cash) return;
 
-    const price = ensure(currentPrices[sym], NaN);
+    // Prix du marché depuis API (synchronisé avec l’affichage)
+    const { prices = {} } = await apiGetPrices([sym]);
+    const price = Number(prices[sym]);
     if (!Number.isFinite(price) || price <= 0) return;
 
     const qty = round2(amountUSD / price);
@@ -328,112 +236,166 @@ export const PortfolioProvider = ({ children }) => {
       at: nowIso(),
     };
 
-    setCash((c) => round2(c - amountUSD));
-    setPositions((prev) => [
-      {
-        id: `POS-${Date.now()}`,
-        symbol: sym,
-        qty,
-        buyPrice: price,
-        buyAt: buyEvent.at,
-      },
-      ...prev,
-    ]);
-    setHistory((h) => [buyEvent, ...h]);
+    const ref = doc(db, "portfolios", user.uid);
+    const snap = await getDoc(ref);
+    const data = snap.data() || defaultPortfolioDoc();
+
+    const nextCash = round2(ensureNum(data.cash, START_CASH) - amountUSD);
+    if (nextCash < 0) return;
+
+    const nextPositions = [
+      { id: `POS-${Date.now()}`, symbol: sym, qty, buyPrice: price, buyAt: buyEvent.at },
+      ...(Array.isArray(data.positions) ? data.positions : []),
+    ];
+    const nextHistory = [buyEvent, ...(Array.isArray(data.history) ? data.history : [])];
+
+    await updateDoc(ref, {
+      cash: nextCash,
+      positions: nextPositions,
+      history: nextHistory,
+    });
   };
 
   const sellPosition = async (symbol, percent = 100, priceNow = null) => {
-    const sym = (symbol || "").toUpperCase();
-    const pcent = Math.min(100, Math.max(0, ensure(percent, 100)));
+    if (!user?.uid) return;
+    const sym = up(symbol);
+    const pct = Math.min(100, Math.max(0, ensureNum(percent, 100)));
 
-    if (!positions.length) return;
+    const ref = doc(db, "portfolios", user.uid);
+    const snap = await getDoc(ref);
+    const data = snap.data() || defaultPortfolioDoc();
+    const positionsArr = Array.isArray(data.positions) ? data.positions : [];
 
-    const idx = positions.findIndex((p) => (p.symbol || "").toUpperCase() === sym);
+    const idx = positionsArr.findIndex(p => up(p.symbol) === sym);
     if (idx < 0) return;
 
-    const pos   = positions[idx];
-    const price = Number.isFinite(priceNow) ? priceNow : ensure(currentPrices[sym], pos.buyPrice);
-    const sellQty = pcent >= 100 ? pos.qty : round2((ensure(pos.qty, 0) * pcent) / 100);
+    const pos = positionsArr[idx];
+    let marketPrice = Number(priceNow);
+    if (!Number.isFinite(marketPrice) || marketPrice <= 0) {
+      const { prices = {} } = await apiGetPrices([sym]);
+      marketPrice = Number(prices[sym]);
+      if (!Number.isFinite(marketPrice) || marketPrice <= 0) return;
+    }
+
+    const sellQty = pct >= 100 ? pos.qty : round2((ensureNum(pos.qty, 0) * pct) / 100);
     if (sellQty <= 0) return;
 
-    const proceeds = round2(sellQty * price);
-    const pnlUSD   = round2((price - ensure(pos.buyPrice, 0)) * sellQty);
-
+    const proceeds = round2(sellQty * marketPrice);
+    const pnlUSD = round2((marketPrice - ensureNum(pos.buyPrice, 0)) * sellQty);
     const sellEvent = {
       id: `SELL-${Date.now()}`,
       type: "SELL",
       symbol: sym,
       qty: sellQty,
-      price,
+      price: marketPrice,
       at: nowIso(),
       pnlUSD,
-      pnlPct: ensure(pos.buyPrice, 0) > 0 ? round2(((price - pos.buyPrice) / pos.buyPrice) * 100) : 0,
+      pnlPct: ensureNum(pos.buyPrice, 0) > 0 ? round2(((marketPrice - pos.buyPrice) / pos.buyPrice) * 100) : 0,
       buyPrice: pos.buyPrice,
     };
 
-    setCash((c) => round2(c + proceeds));
+    // Met à jour positions
+    const newQty = round2(ensureNum(pos.qty, 0) - sellQty);
+    const nextPositions = [...positionsArr];
+    if (newQty <= 0) nextPositions.splice(idx, 1);
+    else nextPositions[idx] = { ...pos, qty: newQty };
 
-    setPositions((prev) => {
-      const newQty = round2(ensure(pos.qty, 0) - sellQty);
-      const updated = [...prev];
-      if (newQty <= 0) updated.splice(idx, 1);
-      else updated[idx] = { ...pos, qty: newQty };
-      return updated;
+    const nextCash = round2(ensureNum(data.cash, START_CASH) + proceeds);
+    const nextHistory = [sellEvent, ...(Array.isArray(data.history) ? data.history : [])];
+
+    await updateDoc(ref, {
+      cash: nextCash,
+      positions: nextPositions,
+      history: nextHistory,
     });
-
-    setHistory((h) => [sellEvent, ...h]);
   };
 
-  // ==== [BLOC: RESET PORTFOLIO] =============================================
-  const resetPortfolio = () => {
-    setCash(START_CASH);
-    setPositions([]);
-    // on garde history par choix (comme dans ta logique)
+  // ---- RESET PT -------------------------------------------------------------
+  const resetPortfolio = async () => {
+    if (!user?.uid) return;
+    const ref = doc(db, "portfolios", user.uid);
+    await updateDoc(ref, {
+      cash: START_CASH,
+      positions: [],
+      // On garde l'historique ? Le besoin a varié selon les pages; ici on le conserve
+      // pour cohérence avec “RESET PT TO 10000$ et conserver historique” validé.
+      // Si tu veux le purger aussi, remplace par: history: []
+    });
   };
 
-  // ==== [BLOC: CONTEXTE - VALUE] ============================================
-  const value = useMemo(
-    () => ({
-      // ÉTATS
-      portfolioName,
-      cash,
-      positions,
-      history,
-      watchlist,
-      currentPrices,
-      lastUpdated,
-      positionsMap,
+  // ---- SNAPSHOT COMMUN (administrable ici si besoin) ------------------------
+  // Si tu veux forcer une nouvelle ref commune (ex: toutes les 5 min côté admin),
+  // appelle setSharedSnapshotRef(). Pour l’instant on ne l’appelle pas automatiquement.
+  const setSharedSnapshotRef = async () => {
+    if (!user?.uid) return;
+    const symbols = Array.from(new Set([
+      ...watchlist.map(up),
+      ...positions.map(p => up(p.symbol)),
+    ])).filter(Boolean);
 
-      // METRIQUES
-      investedAmount,
-      openPositionsValue,
-      totalValue,
-      totalProfit,
-      totalProfitPercent,
-      activePositionsCount,
-      totalTrades,
-      positiveTrades,
+    if (!symbols.length) return;
 
-      // DELTAS
-      priceChange5m,
-      getDeltas,
+    const { prices = {} } = await apiGetPrices(symbols);
+    const parsed = {};
+    for (const k of Object.keys(prices)) {
+      const v = Number(prices[k]);
+      if (Number.isFinite(v)) parsed[up(k)] = v;
+    }
 
-      // ACTIONS
-      setWatchlist,
-      updatePrices,
-      buyPosition,
-      sellPosition,
-      resetPortfolio,
-      setPortfolioName,
-    }),
-    [
-      portfolioName, cash, positions, history, watchlist,
-      currentPrices, lastUpdated, positionsMap,
-      investedAmount, openPositionsValue, totalValue, totalProfit,
-      totalProfitPercent, activePositionsCount, totalTrades, positiveTrades,
-      priceChange5m, getDeltas,
-    ]
-  );
+    await updateDoc(doc(db, "portfolios", user.uid), {
+      snapRef: { ts: Date.now(), prices: parsed },
+    });
+  };
+
+  // ---- Auto refresh des PRIX toutes les 60s --------------------------------
+  useEffect(() => {
+    updatePrices();
+    const iv = setInterval(updatePrices, 60_000);
+    return () => clearInterval(iv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, watchlist.length, positions.length]);
+
+  // ---- VALEUR CONTEXTE ------------------------------------------------------
+  const value = useMemo(() => ({
+    // Etats
+    portfolioName,
+    cash,
+    positions,
+    history,
+    watchlist,
+    currentPrices,
+    lastUpdated,
+    positionsMap,
+
+    // Métriques
+    investedAmount,
+    openPositionsValue,
+    totalValue,
+    totalProfit,
+    totalProfitPercent,
+    activePositionsCount,
+    totalTrades,
+    positiveTrades,
+
+    // Deltas
+    getDeltas,
+
+    // Actions
+    setWatchlist,
+    updatePrices,
+    buyPosition,
+    sellPosition,
+    resetPortfolio,
+    setPortfolioName,
+
+    // Admin/helper (optionnel)
+    setSharedSnapshotRef,
+  }), [
+    portfolioName, cash, positions, history, watchlist,
+    currentPrices, lastUpdated, positionsMap,
+    investedAmount, openPositionsValue, totalValue, totalProfit, totalProfitPercent,
+    activePositionsCount, totalTrades, positiveTrades,
+  ]);
 
   return <PortfolioContext.Provider value={value}>{children}</PortfolioContext.Provider>;
 };
