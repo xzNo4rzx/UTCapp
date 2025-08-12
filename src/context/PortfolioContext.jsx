@@ -191,7 +191,17 @@ export const PortfolioProvider = ({ children }) => {
       if (!symbols.length) return;
 
       // Appel backend
-      const { prices = {} } = await apiGetPrices(symbols);
+let parsed = {};
+for (const sym of symbols) {
+  try {
+    const res = await fetch(`/api/candles?symbol=${sym}USDT&interval=1m&limit=2`);
+    const data = await res.json();
+    if (Array.isArray(data) && data.length) {
+      const last = data[data.length-1];
+      parsed[sym] = Number(last.close);
+    }
+  } catch(e) { console.error(e); }
+}
       const parsed = {};
       for (const k of Object.keys(prices)) {
         const v = Number(prices[k]);
@@ -335,7 +345,17 @@ export const PortfolioProvider = ({ children }) => {
 
     if (!symbols.length) return;
 
-    const { prices = {} } = await apiGetPrices(symbols);
+let parsed = {};
+for (const sym of symbols) {
+  try {
+    const res = await fetch(`/api/candles?symbol=${sym}USDT&interval=1m&limit=2`);
+    const data = await res.json();
+    if (Array.isArray(data) && data.length) {
+      const last = data[data.length-1];
+      parsed[sym] = Number(last.close);
+    }
+  } catch(e) { console.error(e); }
+}
     const parsed = {};
     for (const k of Object.keys(prices)) {
       const v = Number(prices[k]);
