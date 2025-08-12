@@ -1,62 +1,65 @@
-export const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
+// utils/api.js
 
-if (!API_BASE) {
-  console.error("[CONFIG] VITE_API_BASE manquant. Configure-le dans l'env FRONT Render.");
-  throw new Error("VITE_API_BASE missing");
-}
-console.log("[API] Base:", API_BASE);
+export const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) ||
+  (typeof window !== "undefined" && window.__API_BASE__) ||
+  "";
 
-export async function fetchJSON(url, init) {
-  const isAbs = /^https?:\/\//i.test(url);
-  const path  = isAbs ? url : (url.startsWith("/") ? url : `/${url}`);
-  const u     = isAbs ? url : `${API_BASE}${path}`;
-
-  let res;
-  try {
-    res = await fetch(u, init);
-  } catch (err) {
-    console.error("[fetchJSON] Fetch error", err);
-    throw err;
-  }
-
-  const ct = res.headers.get("content-type") || "";
-  if (!res.ok) {
-    let text = "";
-    try { text = await res.text(); } catch (_) {}
-    console.error("[fetchJSON] HTTP", res.status, u, text?.slice?.(0,300));
-    throw new Error(`HTTP ${res.status}`);
-  }
-
-  if (!/application\/json/i.test(ct)) {
-    let text = "";
-    try { text = await res.text(); } catch (_) {}
-    console.error("[fetchJSON] Non-JSON response", { url: u, ct, text: text?.slice?.(0,300) });
-    throw new Error("Invalid JSON response");
-  }
-
-  return res.json();
+async function getJSON(url, options = {}) {
+  const res = await fetch(API_BASE + url, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || res.statusText);
+  try { return JSON.parse(text); } catch { return {}; }
 }
 
-/* ----- API wrappers ----- */
+/**
+ * Retourne les prix courants pour une liste de symboles.
+ * Response attendue: { prices: { SYM: number, ... } }
+ */
 export async function apiGetPrices(symbols = []) {
-  const q = (symbols || []).map(s => `s=${encodeURIComponent(s)}`).join("&");
-  return fetchJSON(`/api/prices?${q}`);
+  const body = JSON.stringify({ symbols: Array.from(new Set(symbols)).map(s => String(s||"").toUpperCase()).filter(Boolean) });
+  return await getJSON("/api/prices", { method: "POST", body });
 }
 
-export async function apiGetKlines(symbol, interval = "1m", limit = 500) {
-  const qs = new URLSearchParams({
-    symbol: String(symbol || ""),
-    interval: String(interval || "1m"),
-    limit: String(limit || 500),
-  }).toString();
-  return fetchJSON(`/api/klines?${qs}`);
+/**
+ * Retourne des bougies (klines) pour un symbole.
+ * Response attendue: { candles: [...] }
+ */
+export async function apiGetKlines(symbol, interval = "1m", limit = 100) {
+  const params = new URLSearchParams({
+    symbol: String(symbol||"").toUpperCase(),
+    interval: String(interval||"1m"),
+    limit: String(limit||"100"),
+  });
+  return await getJSON(`/api/klines?${params.toString()}`);
 }
 
+/**
+ * Déclenche un tick de génération de signaux côté serveur.
+ * Response libre / ignorée par le client.
+ */
 export async function apiTickSignals() {
-  return fetchJSON(`/api/tick-signals`);
+  return await getJSON("/api/signals/tick", { method: "POST", body: "{}" });
 }
 
-export async function apiLatestSignals(limit = 50) {
-  const qs = new URLSearchParams({ limit: String(limit || 50) }).toString();
-  return fetchJSON(`/api/signals/latest?${qs}`);
+/**
+ * Récupère les derniers signaux.
+ * Response attendue: { signals: [...] }
+ */
+export async function apiLatestSignals() {
+  return await getJSON("/api/signals/latest");
+}
+
+/**
+ * Prix d’un seul symbole (number | null), basé sur /api/prices.
+ */
+export async function apiGetPrice(symbol) {
+  const sym = String(symbol || "").toUpperCase();
+  if (!sym) throw new Error("symbol required");
+  const { prices = {} } = await apiGetPrices([sym]);
+  const val = prices[sym];
+  return Number.isFinite(val) ? Number(val) : null;
 }
