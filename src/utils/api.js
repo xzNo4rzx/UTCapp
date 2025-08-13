@@ -1,91 +1,61 @@
-// ===== API CLIENT (robuste) ===================================================
-// Remplace par l'URL EXACTE de ton backend Render 
-export const API_BASE = "https://utc-api.onrender.com";
+// === Base URL (prod par défaut, override via Vite) ========================
+export const API_BASE =
+  (typeof import.meta !== "undefined" &&
+    import.meta.env &&
+    import.meta.env.VITE_API_BASE) ||
+  "https://utc-api.onrender.com";
 
-// --- utilitaires --------------------------------------------------------------
-async function safeParseJSON(res, url) {
-  const text = await res.text();
-  // Si c'est du HTML (erreur/proxy/404), on stoppe net pour éviter "Unexpected token '<'"
-  const trimmed = text.trim();
-  if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html")) {
-    console.error(`❌ HTML reçu au lieu de JSON → ${url}`);
-    console.error(trimmed.slice(0, 250) + "...");
-    throw new Error("HTML received instead of JSON");
+// === Helper GET JSON ======================================================
+export async function getJSON(path, opts = {}) {
+  const url = /^https?:\/\//.test(path)
+    ? path
+    : `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+
+  const headers = { "content-type": "application/json", ...(opts.headers || {}) };
+  const res = await fetch(url, { ...opts, headers });
+  const raw = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText} for ${url} :: ${raw.slice(0,200)}`);
+  }
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (!ct.includes("application/json")) {
+    throw new Error(`Non-JSON response from ${url} :: CT=${ct} :: Preview=${raw.slice(0,200)}`);
   }
   try {
-    return JSON.parse(text);
+    return JSON.parse(raw);
   } catch (e) {
-    console.error(`❌ JSON parse error sur ${url}:`, e);
-    console.error(trimmed.slice(0, 250) + "...");
-    throw e;
+    throw new Error(`Invalid JSON from ${url} :: ${e?.message} :: Preview=${raw.slice(0,200)}`);
   }
 }
 
-async function getJSON(path, options = {}) {
-  const url = `${API_BASE}${path}`;
-  try {
-    const res = await fetch(url, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    if (!res.ok) {
-      // On tente quand même de lire le corps pour logger proprement
-      try { await safeParseJSON(res.clone(), url); } catch {}
-      throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    }
-    return await safeParseJSON(res, url);
-  } catch (err) {
-    console.error(`Erreur API ${path}:`, err);
-    // On renvoie une forme sûre pour ne pas casser l'app
-    return {};
-  }
-}
+// === Endpoints appli ======================================================
 
-function qs(obj = {}) {
-  const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(obj)) {
-    if (Array.isArray(v)) p.set(k, v.join(","));
-    else if (v != null) p.set(k, String(v));
-  }
-  return p.toString() ? `?${p.toString()}` : "";
-}
-
-// --- endpoints utilisés -------------------------------------------------------
-
-// GET /prices?symbols=BTCUSDT,ETHUSDT
-// Response attendue: { prices: { BTCUSDT: 12345.6, ... } }
-export async function apiGetPrices(symbols = []) {
-  const q = qs({ symbols });
-  const data = await getJSON(`/prices${q}`);
-  return { prices: data?.prices || {} };
-}
-
-// Prix d’un seul symbole via /prices (utile pour IATrader et BUY/SELL)
+// Prix spot pour un seul symbole
 export async function apiGetPrice(symbol) {
-  const sym = String(symbol || "").toUpperCase();
-  if (!sym) throw new Error("symbol required");
-  const { prices } = await apiGetPrices([sym]);
-  const val = prices[sym];
-  return Number.isFinite(val) ? Number(val) : null;
+  const data = await getJSON(`/price?symbol=${symbol}`);
+  return data?.price;
 }
 
-// GET /klines?symbol=BTCUSDT&interval=1m&limit=500
-export async function apiGetKlines({ symbol, interval = "1m", limit = 500 }) {
-  const q = qs({ symbol, interval, limit });
-  const data = await getJSON(`/klines${q}`);
-  return { klines: data?.klines || data || [] };
+// Prix spot actuels pour plusieurs symboles
+export async function apiGetPrices(symbols) {
+  const list = Array.isArray(symbols) ? symbols : [symbols];
+  const qs = new URLSearchParams({ symbols: list.join(",") }).toString();
+  return getJSON(`/prices?${qs}`);
 }
 
-// POST /signals/tick  → { ok: true }
-export async function apiTickSignals() {
-  return await getJSON(`/signals/tick`, {
-    method: "POST",
-    body: "{}",
-  });
+// Bougies (klines)
+export async function apiGetKlines(symbol, interval = "1m", limit = 500) {
+  const qs = new URLSearchParams({ symbol, interval, limit }).toString();
+  return getJSON(`/klines?${qs}`);
 }
 
-// GET /signals/latest → { signals: [...] }
+// Derniers signaux
 export async function apiLatestSignals() {
-  const data = await getJSON(`/signals/latest`);
-  return { signals: data?.signals || [] };
+  return getJSON(`/signals/latest`);
+}
+
+// Tick des signaux
+export async function apiTickSignals() {
+  return getJSON(`/signals/tick`);
 }
