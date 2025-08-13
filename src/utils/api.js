@@ -9,6 +9,7 @@ function buildURL(path, params) {
   return url.toString();
 }
 
+console.log("[api] API_BASE =", API_BASE);
 async function jsonFetch(path, { method = "GET", body, params, headers } = {}) {
   const url = buildURL(path, params);
   const res = await fetch(url, {
