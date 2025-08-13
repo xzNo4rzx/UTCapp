@@ -1,97 +1,74 @@
-// src/utils/api.js — propre et robuste
+// src/utils/api.js
+const API_BASE = (import.meta.env.VITE_API_BASE || 'https://utc-api.onrender.com').replace(/\/+$/,'');
 
-// Base URL (priorité env, sinon '/api', sinon fallback Render)
-export const API_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) ||
-  (typeof window !== "undefined" && window.__API_BASE__) ||
-  "/api";
+/** Fetch helper avec gestion stricte du JSON et messages d'erreur utiles */
+async function request(path, opts = {}) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, { method: 'GET', ...opts });
 
-async function request(path, { method = "GET", headers = {}, body } = {}) {
-  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
-  const opts = {
-    method,
-    headers: { "Content-Type": "application/json", ...headers },
-  };
-  if (body !== undefined && body !== null) {
-    opts.body = typeof body === "string" ? body : JSON.stringify(body);
-  }
-
-  let res;
-  try {
-    res = await fetch(url, opts);
-  } catch (e) {
-    throw new Error(`API fetch failed: ${e?.message || e}`);
-  }
-
-  // accepte JSON seulement; en cas d'HTML (<!doctype...), on lève une erreur claire
-  const ct = res.headers.get("content-type") || "";
-  const isJson = ct.includes("application/json") || ct.includes("+json");
+  const ct = res.headers.get('content-type') || '';
+  const isJSON = ct.includes('application/json');
 
   if (!res.ok) {
-    // tente de lire json d'erreur sinon texte brut
-    if (isJson) {
-      let j;
-      try { j = await res.json(); } catch {}
-      throw new Error(`HTTP ${res.status} ${res.statusText}${j ? `: ${JSON.stringify(j)}` : ""}`);
-    } else {
-      const t = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} ${res.statusText}${t ? ` | body: ${t.slice(0,200)}` : ""}`);
-    }
+    let body;
+    try { body = isJSON ? await res.json() : await res.text(); } catch { body = null; }
+    const msg = typeof body === 'object' && body !== null ? JSON.stringify(body) : (body || '');
+    throw new Error(`HTTP ${res.status} ${res.statusText} @ ${url} :: ${msg}`);
   }
-
-  if (isJson) {
-    try { return await res.json(); }
-    catch (e) { throw new Error(`Invalid JSON from ${url}: ${e?.message || e}`); }
-  } else {
-    // si l’API renvoie autre chose que JSON, on renvoie brut (cas rare)
-    return await res.text();
-  }
+  return isJSON ? res.json() : res.text();
 }
 
-/** Healthcheck */
+/** /health (si 404 on renvoie un statut neutre pour éviter de casser le front) */
 export async function apiHealth() {
-  return request("/health");
+  const url = `${API_BASE}/health`;
+  const res = await fetch(url);
+  const ct = res.headers.get('content-type') || '';
+  if (res.status === 404) return { ok: false, missing: true, url };
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} @ ${url}`);
+  return ct.includes('application/json') ? res.json() : { raw: await res.text() };
 }
 
-/** Prix spot unique */
-export async function apiGetPrice(symbol) {
-  if (!symbol) throw new Error("symbol requis");
-  const q = new URLSearchParams({ symbol: String(symbol).toUpperCase() });
-  return request(`/price?${q.toString()}`);
-}
-
-/** Prix spot multiples */
-export async function apiGetPrices(symbols = []) {
-  const list = Array.isArray(symbols) ? symbols : [symbols];
-  if (!list.length) return { prices: {} };
-  const q = new URLSearchParams();
-  for (const s of list) q.append("symbol", String(s).toUpperCase());
+/** /prices?symbols=BTCUSDT,ETHUSDT…  → { prices: {BTC:123,...}, deltas:{}, lastPriceUpdatedAt:"..." } */
+export async function apiGetPrices(symbols) {
+  const arr = Array.isArray(symbols) ? symbols : [symbols];
+  const q = new URLSearchParams({ symbols: arr.join(',') });
   return request(`/prices?${q.toString()}`);
 }
 
-/** Chandelles/Klines */
-export async function apiGetKlines(symbol, interval = "1m", limit = 100) {
-  if (!symbol) throw new Error("symbol requis");
+/** Convenience: un seul prix (string symbole) → number|null */
+export async function apiGetPrice(symbol) {
+  const data = await apiGetPrices([symbol]);
+  // Le backend retourne { prices: { BTC: 123.45 } } → on mappe "BTCUSDT" → "BTC"
+  // Heuristique simple: on prend la partie alpha en tête (ex: BTCUSDT -> BTC)
+  const key = String(symbol || '').toUpperCase().match(/^[A-Z]+/g)?.[0] || String(symbol || '').toUpperCase();
+  const v = Number(data?.prices?.[key]);
+  return Number.isFinite(v) ? v : null;
+}
+
+/** /klines?symbol=BTCUSDT&interval=1m&limit=500 → [[openTime,open,high,low,close,vol,...], ...] */
+export async function apiGetKlines(symbol, interval = '1m', limit = 500) {
   const q = new URLSearchParams({
-    symbol: String(symbol).toUpperCase(),
-    interval,
+    symbol: String(symbol || '').toUpperCase(),
+    interval: String(interval),
     limit: String(limit),
   });
-  return request(`/candles?${q.toString()}`);
+  return request(`/klines?${q.toString()}`);
 }
 
-/** Derniers signaux */
+/** /signals/latest → JSON */
 export async function apiLatestSignals() {
-  return request("/signals/latest");
+  return request(`/signals/latest`);
 }
 
-/** Tick des signaux (rafraîchissement) */
+/** /signals/tick → JSON (poll/rafraîchissement) */
 export async function apiTickSignals() {
-  return request("/signals/tick");
+  return request(`/signals/tick`);
 }
+
+export const API_BASE_URL = API_BASE;
 
 export default {
-  API_BASE,
+  API_BASE: API_BASE_URL,
   apiHealth,
   apiGetPrice,
   apiGetPrices,
