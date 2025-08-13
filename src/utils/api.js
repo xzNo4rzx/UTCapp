@@ -20,11 +20,9 @@ async function jsonFetch(path, { method = "GET", body, params, headers } = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-
   const txt = await res.text();
-  try {
-    return JSON.parse(txt);
-  } catch {
+  try { return JSON.parse(txt); }
+  catch {
     const snip = txt.slice(0, 200);
     throw new Error(`API ${res.status} non‑JSON @ ${url}\n---\n${snip}\n---`);
   }
@@ -63,4 +61,5 @@ export const apiLatestSignals = (limit = 100) =>
   jsonFetch("/get-latest-signals", { params: { limit } });
 
 export const apiTickSignals   = (limit = 100) => apiLatestSignals(limit);
+
 export { API_BASE };

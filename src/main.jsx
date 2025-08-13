@@ -1,3 +1,4 @@
+import "./boot/apiFetchPatch";
 // src/main.jsx
 import React from "react";
 import { UserProvider } from "./context/UserContext.jsx";
