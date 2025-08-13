@@ -52,15 +52,15 @@ function qs(obj = {}) {
 
 // --- endpoints utilisés -------------------------------------------------------
 
-// GET /api/prices?symbols=BTCUSDT,ETHUSDT
+// GET /prices?symbols=BTCUSDT,ETHUSDT
 // Response attendue: { prices: { BTCUSDT: 12345.6, ... } }
 export async function apiGetPrices(symbols = []) {
   const q = qs({ symbols });
-  const data = await getJSON(`/api/prices${q}`);
+  const data = await getJSON(`/prices${q}`);
   return { prices: data?.prices || {} };
 }
 
-// Prix d’un seul symbole via /api/prices (utile pour IATrader et BUY/SELL)
+// Prix d’un seul symbole via /prices (utile pour IATrader et BUY/SELL)
 export async function apiGetPrice(symbol) {
   const sym = String(symbol || "").toUpperCase();
   if (!sym) throw new Error("symbol required");
@@ -69,23 +69,23 @@ export async function apiGetPrice(symbol) {
   return Number.isFinite(val) ? Number(val) : null;
 }
 
-// GET /api/klines?symbol=BTCUSDT&interval=1m&limit=500
+// GET /klines?symbol=BTCUSDT&interval=1m&limit=500
 export async function apiGetKlines({ symbol, interval = "1m", limit = 500 }) {
   const q = qs({ symbol, interval, limit });
-  const data = await getJSON(`/api/klines${q}`);
+  const data = await getJSON(`/klines${q}`);
   return { klines: data?.klines || data || [] };
 }
 
-// POST /api/signals/tick  → { ok: true }
+// POST /signals/tick  → { ok: true }
 export async function apiTickSignals() {
-  return await getJSON(`/api/signals/tick`, {
+  return await getJSON(`/signals/tick`, {
     method: "POST",
     body: "{}",
   });
 }
 
-// GET /api/signals/latest → { signals: [...] }
+// GET /signals/latest → { signals: [...] }
 export async function apiLatestSignals() {
-  const data = await getJSON(`/api/signals/latest`);
+  const data = await getJSON(`/signals/latest`);
   return { signals: data?.signals || [] };
 }
