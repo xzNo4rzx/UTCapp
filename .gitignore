@@ -1,2 +1,30 @@
-# FICHIER: ~/Documents/utc-app-full/.gitignore
-.env.local
+# Builds / caches
+dist/
+node_modules/
+.vite/
+.cache/
+coverage/
+.tmp/
+.esbuild/
+*.log
+
+# Données locales / dumps
+data/
+dumps/
+*.csv
+*.sqlite
+*.db
+*.rdb
+*.zip
+
+# Vite/React
+*.local
+*.map
+
+# OS
+.DS_Store
+
+# Env
+.env
+.env.*
+!.env.example
