@@ -1,122 +1,134 @@
 // src/utils/api.js
+/* =========================================================================================
+ * API helpers (avec debug agressif pour traquer le "Unexpected token '<' ... not valid JSON")
+ * ========================================================================================= */
 
-// ----- Base URL (configurable via .env/.env.production) ---------------------
-// VITE_API_BASE=https://utc-api.onrender.com
-export const API_BASE =
-  (typeof import.meta !== "undefined" &&
-    import.meta.env &&
-    import.meta.env.VITE_API_BASE) ||
-  "https://utc-api.onrender.com";
+export const API_BASE = (
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) ||
+  "https://utc-api.onrender.com"
+).replace(/\/+$/, ""); // sans trailing slash
 
-// Petit helper pour voir la base au runtime (une seule fois)
-if (typeof window !== "undefined") {
-  // eslint-disable-next-line no-console
-  console.log("__API_BASE__", API_BASE);
-}
+// Active le debug si besoin dans la console du navigateur : window.__API_DEBUG__ = true
+const DBG = typeof window !== "undefined" ? !!window.__API_DEBUG__ : true;
 
-// ----- Utils ----------------------------------------------------------------
-function buildUrl(path, params) {
-  const u = new URL(path.replace(/^\//, ""), API_BASE + "/");
+// Petit helper pour construire les URLs avec query params
+function buildURL(path, params) {
+  const url = new URL(API_BASE + (path.startsWith("/") ? path : `/${path}`));
   if (params && typeof params === "object") {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v === undefined || v === null) return;
-      u.searchParams.set(k, Array.isArray(v) ? v.join(",") : String(v));
-    });
+    Object.entries(params)
+      .filter(([_, v]) => v !== undefined && v !== null)
+      .forEach(([k, v]) => url.searchParams.set(k, Array.isArray(v) ? v.join(",") : String(v)));
   }
-  return u.toString();
+  return url.toString();
 }
 
-// fetch JSON robuste : si la réponse n’est pas JSON (ex: HTML 404),
-// on remonte une erreur explicite avec l’aperçu du body.
-export async function jsonFetch(url, options) {
+// Fetch qui log + tente JSON + détecte les réponses HTML (index.html / 404 etc.)
+async function jsonFetch(path, { method = "GET", body = undefined, params = undefined, headers = {} } = {}) {
+  const url = buildURL(path, params);
+
+  if (DBG) {
+    console.log("[api] >>>", method, url, body ? { body } : "");
+  }
+
   const res = await fetch(url, {
-    // credentials si besoin plus tard (COOKIES) ; inutile sinon
-    // credentials: "include",
-    ...(options || {}),
+    method,
+    headers: {
+      "Accept": "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
+
   const text = await res.text();
+
+  if (DBG) {
+    console.log("[api] <<<", res.status, res.statusText, "from", url);
+  }
+
+  // Si ce n'est pas du JSON valide, on dump un extrait pour comprendre (souvent un HTML 404/500)
   try {
-    const data = text ? JSON.parse(text) : {};
-    if (!res.ok) {
-      throw new Error(`API ${res.status} ${url}: ${text.slice(0, 200)}`);
-    }
+    const data = JSON.parse(text);
     return data;
   } catch {
-    // Pas du JSON → doctype/HTML probable
-    throw new Error(`API ${res.status} ${url}: ${text.slice(0, 200)}`);
-  }
-}
-
-// ----- Endpoints prix -------------------------------------------------------
-
-// Prix d’un seul symbole (string ou déjà en USDT). Retourne {symbol, price}
-export async function apiGetPrice(symbol) {
-  const sym = String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  // Le backend a /price/{symbol} ET /prices?symbols=...
-  // On utilise /price/{symbol} quand on a un seul symbole.
-  const url = buildUrl(`/price/${sym}`);
-  const data = await jsonFetch(url);
-  // compat: certains handlers renvoient {symbol, price}, d'autres {prices:{SYM:...}}
-  if (data && typeof data.price === "number") {
-    return { symbol: (data.symbol || sym).toUpperCase(), price: data.price };
-  }
-  if (data && data.prices && typeof data.prices[sym] === "number") {
-    return { symbol: sym, price: data.prices[sym] };
-  }
-  return { symbol: sym, price: null };
-}
-
-// Prix multiples : symbols = ["BTC","ETH","SOL", ...]
-// Retourne { prices: { BTC: number, ETH: number, ... }, updatedAt }
-export async function apiGetPrices(symbols) {
-  const list = (symbols || [])
-    .map((s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""))
-    .filter(Boolean);
-
-  if (!list.length) return { prices: {}, updatedAt: new Date().toISOString() };
-
-  const url = buildUrl("/prices", { symbols: list.join(",") });
-  const data = await jsonFetch(url);
-
-  // Le backend renvoie { prices: { BTC: 123, ETH: 456 }, updatedAt: iso }
-  // (ou parfois { symbols:[], prices:{} } selon route)
-  const out = {};
-  if (data && data.prices && typeof data.prices === "object") {
-    for (const [k, v] of Object.entries(data.prices)) {
-      const K = String(k).toUpperCase();
-      const num = Number(v);
-      if (Number.isFinite(num)) out[K] = num;
+    const snippet = text.slice(0, 200);
+    const looksLikeHTML = /^\s*<!doctype html>|^\s*<html/i.test(snippet);
+    if (looksLikeHTML) {
+      console.error(
+        `[api] Réponse HTML au lieu de JSON pour ${url} (status ${res.status}). Extrait:\n---\n${snippet}\n---`
+      );
+      throw new Error(`API ${res.status} ${url}: HTML reçu (probable mauvaise route ou base URL).`);
+    } else {
+      console.error(
+        `[api] Réponse non-JSON pour ${url} (status ${res.status}). Extrait:\n---\n${snippet}\n---`
+      );
+      throw new Error(`API ${res.status} ${url}: Réponse non JSON.`);
     }
   }
-  return { prices: out, updatedAt: data?.updatedAt || new Date().toISOString() };
 }
 
-// Chandeliers/Klines (pour les charts)
+/* =========================================================================================
+ * Endpoints wrappers
+ * ========================================================================================= */
+
+// /ping
+export async function apiPing() {
+  return jsonFetch("/ping");
+}
+
+// /me/init
+export async function apiMeInit() {
+  return jsonFetch("/me/init");
+}
+
+// /price/{symbol}
+export async function apiGetPrice(symbol) {
+  const sym = String(symbol || "").toUpperCase();
+  return jsonFetch(`/price/${encodeURIComponent(sym)}`);
+}
+
+// /prices?symbols=BTC,ETH
+export async function apiGetPrices(symbols) {
+  const list = Array.isArray(symbols) ? symbols : String(symbols || "").split(",");
+  const syms = list.map(s => String(s || "").trim().toUpperCase()).filter(Boolean);
+  if (!syms.length) return { prices: {} };
+  return jsonFetch("/prices", { params: { symbols: syms.join(",") } });
+}
+
+// /klines?symbol=BTCUSDT&interval=1m&limit=120
 export async function apiGetKlines(symbol, interval = "1m", limit = 120) {
   const sym = String(symbol || "").toUpperCase();
-  const url = buildUrl("/klines", { symbol: sym, interval, limit });
-  const data = await jsonFetch(url);
-  // backend shape: { symbol, interval, limit, klines: [...] }
-  return Array.isArray(data?.klines) ? data.klines : [];
+  return jsonFetch("/klines", { params: { symbol: sym, interval, limit } });
 }
 
-// ----- Signals / Logs -------------------------------------------------------
+// /deltas?symbols=BTC,ETH&windows=1m,5m,10m,1h,6h,1d,7d
+export async function apiGetDeltas(symbols, windows = "1m,5m,10m,1h,6h,1d,7d") {
+  const list = Array.isArray(symbols) ? symbols : String(symbols || "").split(",");
+  const syms = list.map(s => String(s || "").trim().toUpperCase()).filter(Boolean);
+  return jsonFetch("/deltas", { params: { symbols: syms.join(","), windows } });
+}
 
-// Derniers signaux (fichier data/signals.json exposé par l’API)
+// /top-movers?window=5m&limit=5
+export async function apiTopMovers(window = "5m", limit = 5) {
+  return jsonFetch("/top-movers", { params: { window, limit } });
+}
+
+// /get-latest-signals?limit=100
 export async function apiLatestSignals(limit = 100) {
-  const url = buildUrl("/get-latest-signals", { limit });
-  const data = await jsonFetch(url);
-  // backend renvoie un tableau direct ou { ... } → on normalise en array
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.signals)) return data.signals;
-  return [];
+  return jsonFetch("/get-latest-signals", { params: { limit } });
 }
 
-// Tick “signals” (wrapper pratique si le front s’attend à cette fonction)
-// Ici on retourne simplement le même payload que apiLatestSignals.
-export async function apiTickSignals(limit = 50) {
+/* -----------------------------------------------------------------------------------------
+ * Stub optionnel pour compat compat (si un ancien code importe apiTickSignals,
+ * on le fait pointer vers apiLatestSignals pour éviter un crash de build/runtime).
+ * ----------------------------------------------------------------------------------------- */
+export async function apiTickSignals(limit = 100) {
   return apiLatestSignals(limit);
 }
 
-// ----- Export helpers optionnels --------------------------------------------
-export { buildUrl };
+/* =========================================================================================
+ * Petit log au chargement pour vérifier la base
+ * ========================================================================================= */
+if (DBG) {
+  console.log("__API_BASE__", API_BASE);
+}
