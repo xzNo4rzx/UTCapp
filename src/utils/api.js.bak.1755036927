@@ -1,0 +1,62 @@
+export const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/+$/, "");
+
+if (!API_BASE) {
+  console.error("[CONFIG] VITE_API_BASE manquant. Configure-le dans l'env FRONT Render.");
+  throw new Error("VITE_API_BASE missing");
+}
+console.log("[API] Base:", API_BASE);
+
+export async function fetchJSON(url, init) {
+  const isAbs = /^https?:\/\//i.test(url);
+  const path  = isAbs ? url : (url.startsWith("/") ? url : `/${url}`);
+  const u     = isAbs ? url : `${API_BASE}${path}`;
+
+  let res;
+  try {
+    res = await fetch(u, init);
+  } catch (err) {
+    console.error("[fetchJSON] Fetch error", err);
+    throw err;
+  }
+
+  const ct = res.headers.get("content-type") || "";
+  if (!res.ok) {
+    let text = "";
+    try { text = await res.text(); } catch (_) {}
+    console.error("[fetchJSON] HTTP", res.status, u, text?.slice?.(0,300));
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  if (!/application\/json/i.test(ct)) {
+    let text = "";
+    try { text = await res.text(); } catch (_) {}
+    console.error("[fetchJSON] Non-JSON response", { url: u, ct, text: text?.slice?.(0,300) });
+    throw new Error("Invalid JSON response");
+  }
+
+  return res.json();
+}
+
+/* ----- API wrappers ----- */
+export async function apiGetPrices(symbols = []) {
+  const q = (symbols || []).map(s => `s=${encodeURIComponent(s)}`).join("&");
+  return fetchJSON(`/api/prices?${q}`);
+}
+
+export async function apiGetKlines(symbol, interval = "1m", limit = 500) {
+  const qs = new URLSearchParams({
+    symbol: String(symbol || ""),
+    interval: String(interval || "1m"),
+    limit: String(limit || 500),
+  }).toString();
+  return fetchJSON(`/api/klines?${qs}`);
+}
+
+export async function apiTickSignals() {
+  return fetchJSON(`/api/tick-signals`);
+}
+
+export async function apiLatestSignals(limit = 50) {
+  const qs = new URLSearchParams({ limit: String(limit || 50) }).toString();
+  return fetchJSON(`/api/signals/latest?${qs}`);
+}
