@@ -1,80 +1,79 @@
 // FICHIER: src/utils/api.js
-
-// Base API résolue (ordre de priorité : fenêtre -> .env -> proxy /api du front)
+// Base API :
+// - 1) VITE_API_BASE si défini (ex: https://utc-api.onrender.com)
+// - 2) window.__API_BASE__ si tu joues côté client
+// - 3) /api (proxy/render)
 export const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) ||
   (typeof window !== "undefined" && window.__API_BASE__) ||
-  import.meta.env.VITE_API_BASE ||
-  (typeof window !== "undefined" ? `${window.location.origin}/api` : "/api");
+  "/api";
 
-// --- Utils -------------------------------------------------------------------
-const toQuery = (params = {}) =>
-  Object.entries(params)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join("&");
+// --- petit helper GET JSON robuste
+async function httpGetJson(path, params = {}) {
+  const usp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null) return;
+    usp.set(k, String(v));
+  });
+  const url = `${API_BASE.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}${
+    usp.toString() ? `?${usp.toString()}` : ""
+  }`;
 
-async function httpGet(path, params) {
-  const url = `${API_BASE}/${path}${params ? `?${toQuery(params)}` : ""}`;
   const res = await fetch(url, { credentials: "include" });
-
-  // Protection contre les réponses HTML (ex: 404/500 proxy) -> évite "Unexpected token '<'"
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) {
-    const text = await res.text();
-    throw new Error(`API non‑JSON (${res.status}) ${url}: ${text.slice(0, 200)}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${url}: ${text}`);
   }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`API ${res.status} ${url}: ${JSON.stringify(err)}`);
+  // pro­tection "Unexpected token <" => on checke le Content‑Type
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API content-type not JSON for ${url}: ${text.slice(0, 200)}`);
   }
   return res.json();
 }
 
-// --- PRIX & CANDLES ----------------------------------------------------------
+// =================== PRICES / KLINES ===================
+
 export async function apiGetPrice(symbol) {
-  const sym = String(symbol || "").toUpperCase().trim();
-  if (!sym) return { symbol: sym, price: null };
-  const data = await httpGet(`price/${sym}`);
-  return { symbol: sym, price: data?.price ?? null };
+  const sym = String(symbol || "").toUpperCase();
+  const data = await httpGetJson(`price/${encodeURIComponent(sym)}`);
+  return Number(data?.price ?? NaN);
 }
 
-export async function apiGetPrices(symbolsArr = []) {
+export async function apiGetPrices(symbolsArr) {
   const symbols = (symbolsArr || [])
     .map((s) => String(s || "").toUpperCase().trim())
-    .filter(Boolean)
-    .join(",");
-  if (!symbols) return { prices: {}, updatedAt: new Date().toISOString() };
-  const data = await httpGet("prices", { symbols });
-  return {
-    prices: data?.prices || {},
-    updatedAt: data?.updatedAt || new Date().toISOString(),
-  };
+    .filter(Boolean);
+  if (!symbols.length) return {};
+  const data = await httpGetJson("prices", { symbols: symbols.join(",") });
+  const out = {};
+  const mp = data?.prices || {};
+  for (const k of Object.keys(mp)) {
+    const v = Number(mp[k]);
+    if (Number.isFinite(v)) out[k.toUpperCase()] = v;
+  }
+  return out;
 }
 
 export async function apiGetKlines(symbol, interval = "1m", limit = 120) {
-  const sym = String(symbol || "").toUpperCase().trim();
-  if (!sym) return { symbol: sym, interval, limit, klines: [] };
-  const data = await httpGet("klines", { symbol: sym, interval, limit });
-  return {
-    symbol: sym,
-    interval: data?.interval || interval,
-    limit: data?.limit || limit,
-    klines: data?.klines || [],
-  };
+  const data = await httpGetJson("klines", { symbol, interval, limit });
+  return Array.isArray(data?.klines) ? data.klines : [];
 }
 
-// --- DELTAS & TOP MOVERS -----------------------------------------------------
-export async function apiDeltas(symbolsArr = [], windows = ["1m", "5m", "10m", "1h", "6h", "1d", "7d"]) {
+// =================== DELTAS & TOP MOVERS ===================
+
+export async function apiDeltas(symbolsArr, windows = ["1m", "5m", "10m", "1h", "6h", "1d", "7d"]) {
   const symbols = (symbolsArr || [])
     .map((s) => String(s || "").toUpperCase().trim())
     .filter(Boolean)
     .join(",");
-  const ws = (windows || []).map(String).join(",");
+  const ws = (windows || []).join(",");
   if (!symbols) {
     return { deltas: {}, bases: {}, updatedAt: new Date().toISOString() };
   }
-  const data = await httpGet("deltas", { symbols, windows: ws });
+  const data = await httpGetJson("deltas", { symbols, windows: ws });
   return {
     deltas: data?.deltas || {},
     bases: data?.bases || {},
@@ -83,7 +82,7 @@ export async function apiDeltas(symbolsArr = [], windows = ["1m", "5m", "10m", "
 }
 
 export async function apiTopMovers(window = "5m", limit = 5) {
-  const data = await httpGet("top-movers", { window, limit });
+  const data = await httpGetJson("top-movers", { window, limit });
   return {
     window: data?.window || window,
     updatedAt: data?.updatedAt || new Date().toISOString(),
@@ -92,14 +91,16 @@ export async function apiTopMovers(window = "5m", limit = 5) {
   };
 }
 
-// --- SIGNALS (compat IATraderContext) ---------------------------------------
-export async function apiTickSignals(limit = 100) {
-  // côté front : simple fetch périodique (le “tick” est géré par setInterval dans le contexte)
-  const data = await httpGet("get-latest-signals", { limit });
+// =================== SIGNALS ===================
+
+export async function apiLatestSignals(limit = 100) {
+  const data = await httpGetJson("get-latest-signals", { limit });
   return Array.isArray(data) ? data : [];
 }
 
-export async function apiLatestSignals(limit = 100) {
-  const data = await httpGet("get-latest-signals", { limit });
-  return Array.isArray(data) ? data : [];
+// Tick : si tu as un endpoint de “poll”, sinon no-op
+export async function apiTickSignals() {
+  try {
+    await httpGetJson("trader-log");
+  } catch (_) {}
 }
