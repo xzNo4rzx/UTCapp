@@ -2,143 +2,160 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGetPrices, apiDeltas } from "../utils/api";
 
-// Symboles à afficher (mets ceux que tu veux)
-const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT"];
+// Fallback au cas où rien ne remonte encore côté backend
+const DEFAULT_SYMBOLS = [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "XRPUSDT",
+  "ADAUSDT",
+  "DOGEUSDT",
+];
 
-const WINDOWS = "1m,5m,10m,1h,6h,1d,7d";
+const WINDOWS = ["1m", "5m", "10m", "1h", "6h", "1d", "7d"];
 
-function normalizePrices(resp) {
-  // /prices -> { prices: {SYM: number} } ou parfois resp direct (fallback)
-  if (resp && typeof resp === "object") {
-    if (resp.prices && typeof resp.prices === "object") return resp.prices;
-    // fallback: si jamais l’API renvoyait déjà un objet clé->prix
-    return resp;
-  }
-  return {};
-}
-
-function normalizeDeltas(resp) {
-  // /deltas -> { deltas: {SYM: {1m:..}} }
-  if (resp && typeof resp === "object") {
-    if (resp.deltas && typeof resp.deltas === "object") return resp.deltas;
-    return resp;
-  }
-  return {};
+function classForDelta(v) {
+  if (typeof v !== "number" || !isFinite(v)) return "text-gray-500";
+  if (v > 0) return "text-green-600";
+  if (v < 0) return "text-red-600";
+  return "text-gray-800";
 }
 
 export default function Trading() {
-  const [symbols] = useState(DEFAULT_SYMBOLS);
-  const [rows, setRows] = useState([]);           // toujours un ARRAY
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
+  const [prices, setPrices] = useState({});        // { BTCUSDT: 64000, ... }
+  const [deltas, setDeltas] = useState({});        // { BTCUSDT: { "1m": 0.2, ... }, ... }
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  // Les symboles affichés = union clés(prices) ∪ clés(deltas) ∪ fallback
+  const symbols = useMemo(() => {
+    const s = new Set(DEFAULT_SYMBOLS);
+    Object.keys(prices || {}).forEach((k) => s.add(String(k).toUpperCase()));
+    Object.keys(deltas || {}).forEach((k) => s.add(String(k).toUpperCase()));
+    return Array.from(s);
+  }, [prices, deltas]);
 
   async function loadAll() {
-    setLoading(true);
-    setErr("");
+    setErr(null);
     try {
-      // 1) Appels API
-      const [prResp, dlResp] = await Promise.all([
-        apiGetPrices(symbols),
-        apiDeltas(symbols, WINDOWS),
+      // 1) On demande sur la base des symboles connus (fallback si rien)
+      const baseSymbols = symbols.length ? symbols : DEFAULT_SYMBOLS;
+
+      const [pricesResp, deltasResp] = await Promise.all([
+        apiGetPrices(baseSymbols),
+        apiDeltas(baseSymbols, WINDOWS),
       ]);
 
-  const [prResp, dlResp] = await Promise.all([
-  apiGetPrices(symbols),
-  apiDeltas(symbols, WINDOWS),
-]);
+      // pricesResp attendu objet ; si jamais ce n'est pas un objet, fallback {}
+      const prObj = pricesResp && typeof pricesResp === "object" ? pricesResp : {};
+      setPrices(prObj);
 
-console.log("DEBUG raw prResp =", prResp);
-console.log("DEBUG raw dlResp =", dlResp);
+      // deltasResp attendu { deltas, bases, updatedAt }
+      const dlObj =
+        deltasResp && typeof deltasResp === "object" && deltasResp.deltas
+          ? deltasResp.deltas
+          : {};
+      setDeltas(dlObj);
 
-      // 2) Normalisation
-      const prices = normalizePrices(prResp);
-      const deltas = normalizeDeltas(dlResp);
-
-      // 3) Construction de la liste (toujours un tableau)
-      const newRows = symbols.map((s) => {
-        const p = prices?.[s] ?? null;
-        const d = deltas?.[s] ?? {};
-        return {
-          symbol: s,
-          price: typeof p === "number" ? p : null,
-          d1m: d?.["1m"] ?? null,
-          d5m: d?.["5m"] ?? null,
-          d10m: d?.["10m"] ?? null,
-          d1h: d?.["1h"] ?? null,
-          d6h: d?.["6h"] ?? null,
-          d1d: d?.["1d"] ?? null,
-          d7d: d?.["7d"] ?? null,
-        };
-      });
-
-      setRows(newRows);
+      setUpdatedAt(
+        (deltasResp && deltasResp.updatedAt) || new Date().toISOString()
+      );
     } catch (e) {
       console.error("[Trading] loadAll error", e);
-      setErr(e?.message || String(e));
-      setRows([]); // garantie: array
+      setErr(String(e?.message || e));
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    // premier chargement
+    // (on utilise DEFAULT_SYMBOLS au premier run si rien en state)
     loadAll();
+    // rafraîchit toutes les 30s
     const id = setInterval(loadAll, 30_000);
     return () => clearInterval(id);
-  }, []); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // un seul montage
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <h1 className="text-xl font-bold">Trading</h1>
-        <button
-          onClick={loadAll}
-          className="px-3 py-1 rounded bg-blue-600 text-white"
-          disabled={loading}
-        >
-          {loading ? "Loading..." : "Refresh"}
-        </button>
-        {err && <span className="text-amber-400">⚠ {err}</span>}
+    <div style={{ padding: 16 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
+        Trading — Prix & Deltas
+      </h1>
+
+      <div style={{ fontSize: 12, color: "#666", marginBottom: 10 }}>
+        {loading ? "Chargement…" : "Données chargées."}{" "}
+        {updatedAt ? `— MAJ: ${updatedAt}` : null}{" "}
+        {err ? (
+          <span style={{ color: "#b91c1c", fontWeight: 600 }}>
+            • Erreur: {err}
+          </span>
+        ) : null}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left border-b border-zinc-700">
-              <th className="py-2 pr-4">Symbol</th>
-              <th className="py-2 pr-4">Price</th>
-              <th className="py-2 pr-4">1m</th>
-              <th className="py-2 pr-4">5m</th>
-              <th className="py-2 pr-4">10m</th>
-              <th className="py-2 pr-4">1h</th>
-              <th className="py-2 pr-4">6h</th>
-              <th className="py-2 pr-4">1d</th>
-              <th className="py-2 pr-4">7d</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(rows || []).map((r) => (
-              <tr key={r.symbol} className="border-b border-zinc-800">
-                <td className="py-2 pr-4 font-medium">{r.symbol}</td>
-                <td className="py-2 pr-4">{r.price ?? "—"}</td>
-                <td className="py-2 pr-4">{r.d1m ?? "—"}%</td>
-                <td className="py-2 pr-4">{r.d5m ?? "—"}%</td>
-                <td className="py-2 pr-4">{r.d10m ?? "—"}%</td>
-                <td className="py-2 pr-4">{r.d1h ?? "—"}%</td>
-                <td className="py-2 pr-4">{r.d6h ?? "—"}%</td>
-                <td className="py-2 pr-4">{r.d1d ?? "—"}%</td>
-                <td className="py-2 pr-4">{r.d7d ?? "—"}%</td>
-              </tr>
-            ))}
-            {(!rows || rows.length === 0) && (
-              <tr>
-                <td className="py-3 text-zinc-400" colSpan={9}>
-                  Aucune donnée pour le moment.
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
+            <th style={{ padding: "8px 4px" }}>Symbol</th>
+            <th style={{ padding: "8px 4px" }}>Price</th>
+            <th style={{ padding: "8px 4px" }}>Δ 1m</th>
+            <th style={{ padding: "8px 4px" }}>Δ 5m</th>
+            <th style={{ padding: "8px 4px" }}>Δ 1h</th>
+            <th style={{ padding: "8px 4px" }}>Δ 1d</th>
+          </tr>
+        </thead>
+        <tbody>
+          {symbols.map((sym) => {
+            const p = prices?.[sym];
+            const d = deltas?.[sym] || {};
+            const d1m = d?.["1m"];
+            const d5m = d?.["5m"];
+            const d1h = d?.["1h"];
+            const d1d = d?.["1d"];
+
+            return (
+              <tr key={sym} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                <td style={{ padding: "8px 4px", fontWeight: 600 }}>{sym}</td>
+                <td style={{ padding: "8px 4px" }}>
+                  {typeof p === "number" && isFinite(p) ? p : "—"}
+                </td>
+                <td style={{ padding: "8px 4px" }} className={classForDelta(d1m)}>
+                  {typeof d1m === "number" && isFinite(d1m) ? `${d1m}%` : "—"}
+                </td>
+                <td style={{ padding: "8px 4px" }} className={classForDelta(d5m)}>
+                  {typeof d5m === "number" && isFinite(d5m) ? `${d5m}%` : "—"}
+                </td>
+                <td style={{ padding: "8px 4px" }} className={classForDelta(d1h)}>
+                  {typeof d1h === "number" && isFinite(d1h) ? `${d1h}%` : "—"}
+                </td>
+                <td style={{ padding: "8px 4px" }} className={classForDelta(d1d)}>
+                  {typeof d1d === "number" && isFinite(d1d) ? `${d1d}%` : "—"}
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {/* Mini box debug utile en phase intégration */}
+      <div
+        style={{
+          marginTop: 16,
+          padding: 8,
+          background: "#f9fafb",
+          border: "1px dashed #e5e7eb",
+          fontSize: 12,
+          lineHeight: "18px",
+          color: "#374151",
+        }}
+      >
+        <div>
+          <strong>Debug:</strong> symbols={JSON.stringify(symbols)}
+        </div>
+        <div>prices keys={JSON.stringify(Object.keys(prices || {}))}</div>
+        <div>deltas keys={JSON.stringify(Object.keys(deltas || {}))}</div>
       </div>
     </div>
   );
