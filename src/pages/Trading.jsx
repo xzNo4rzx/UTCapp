@@ -42,6 +42,14 @@ export default function Trading() {
         apiDeltas(symbols, WINDOWS),
       ]);
 
+  const [prResp, dlResp] = await Promise.all([
+  apiGetPrices(symbols),
+  apiDeltas(symbols, WINDOWS),
+]);
+
+console.log("DEBUG raw prResp =", prResp);
+console.log("DEBUG raw dlResp =", dlResp);
+
       // 2) Normalisation
       const prices = normalizePrices(prResp);
       const deltas = normalizeDeltas(dlResp);
