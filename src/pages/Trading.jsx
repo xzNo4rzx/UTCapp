@@ -1,13 +1,10 @@
-// FICHIER: src/pages/Trading.jsx
+// FICHIER: src/pages/Trading.jsx (version diagnostic)
 import React, { useEffect, useMemo, useState } from "react";
-import { apiGetPrices, apiDeltas } from "../utils/api";
+import { apiGetPrices, apiDeltas, API_BASE } from "../utils/api";
 
-// Watchlist mini pour debug (mets ce que tu veux)
-const DEFAULT_PAIRS = [
-  "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT",
-];
-
-const WINDOWS = ["1m", "5m", "1h"]; // on affiche 3 colonnes claires
+// Ajuste si ton backend renvoie BTC/ETH/SOL sans USDT
+const DEFAULT_PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT"];
+const WINDOWS = ["1m", "5m", "1h"];
 
 function pctFmt(v) {
   if (v === null || v === undefined) return "—";
@@ -16,14 +13,21 @@ function pctFmt(v) {
   const s = n.toFixed(2) + "%";
   return n > 0 ? `+${s}` : s;
 }
-
 function priceFmt(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
-  // prix crypto large -> 2 à 4 décimales selon taille
   if (n >= 1000) return n.toFixed(2);
   if (n >= 1) return n.toFixed(3);
   return n.toFixed(6);
+}
+function normCandidates(sym) {
+  // On tente plusieurs normalisations : exact, sans "/", sans "USDT", avec "USDT"
+  const s = String(sym || "").toUpperCase();
+  const out = [s];
+  if (s.includes("/")) out.push(s.replace("/", ""));
+  if (s.endsWith("USDT")) out.push(s.slice(0, -4)); // BTCUSDT -> BTC
+  else out.push(s + "USDT");                         // BTC -> BTCUSDT
+  return Array.from(new Set(out));
 }
 
 export default function Trading() {
@@ -32,19 +36,38 @@ export default function Trading() {
   const [deltas, setDeltas] = useState({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [diag, setDiag] = useState({
+    fetchedAt: "",
+    pricesKeys: [],
+    deltasKeys: [],
+    lastPricesSample: "",
+    lastDeltasSample: "",
+  });
 
-  // charge prix + deltas
   const load = async () => {
     try {
       setErr("");
       setLoading(true);
-      const [pr, dl] = await Promise.all([
-        apiGetPrices(pairs),
-        apiDeltas(pairs, WINDOWS),
-      ]);
+      const [pr, dl] = await Promise.all([apiGetPrices(pairs), apiDeltas(pairs, WINDOWS)]);
+      // Logs console pour voir brut
+      console.log("[Trading] apiGetPrices ->", pr);
+      console.log("[Trading] apiDeltas ->", dl);
+
+      const deltasMap = (dl && dl.deltas) || {};
       setPrices(pr || {});
-      setDeltas((dl && dl.deltas) || {});
+      setDeltas(deltasMap);
+
+      const pk = Object.keys(pr || {});
+      const dk = Object.keys(deltasMap || {});
+      setDiag({
+        fetchedAt: new Date().toISOString(),
+        pricesKeys: pk,
+        deltasKeys: dk,
+        lastPricesSample: JSON.stringify(pr || {}, null, 2).slice(0, 600),
+        lastDeltasSample: JSON.stringify(deltasMap || {}, null, 2).slice(0, 600),
+      });
     } catch (e) {
+      console.error(e);
       setErr(String(e?.message || e));
     } finally {
       setLoading(false);
@@ -60,28 +83,54 @@ export default function Trading() {
 
   const rows = useMemo(() => {
     return pairs.map((sym) => {
-      const p = prices[sym] ?? prices[sym.replace("/","")] ?? prices[sym.replace("USDT","")];
-      const d = deltas[sym] || deltas[sym.replace("/","")] || deltas[sym.replace("USDT","")] || {};
-      return { sym, price: p, d };
+      const candidates = normCandidates(sym);
+      let p = null;
+      for (const c of candidates) if (prices[c] !== undefined) { p = prices[c]; break; }
+
+      let d = null;
+      for (const c of candidates) if (deltas[c] !== undefined) { d = deltas[c]; break; }
+
+      return { sym, price: p, d: d || {} };
     });
   }, [pairs, prices, deltas]);
 
+  // Qui manque ?
+  const missingInPrices = pairs.filter(
+    (sym) => !normCandidates(sym).some((c) => prices[c] !== undefined)
+  );
+  const missingInDeltas = pairs.filter(
+    (sym) => !normCandidates(sym).some((c) => deltas[c] !== undefined)
+  );
+
   return (
     <div style={{ padding: 16 }}>
-      <h2>Trading</h2>
+      <h2>Trading (diagnostic)</h2>
 
-      <div style={{ marginBottom: 12 }}>
-        <button onClick={load}>↻ Refresh</button>
-        {loading && <span style={{ marginLeft: 8 }}>Chargement…</span>}
+      {/* Panneau debug clair */}
+      <div style={box}>
+        <div><b>API_BASE</b>: <code>{API_BASE}</code></div>
+        <div><b>Fetched at</b>: {diag.fetchedAt || "—"}</div>
+        <div style={{ marginTop: 8 }}>
+          <b>Clés reçues</b> — prices: [{diag.pricesKeys.join(", ")}] | deltas: [{diag.deltasKeys.join(", ")}]
+        </div>
+        {(missingInPrices.length || missingInDeltas.length) ? (
+          <div style={{ marginTop: 8, color: "#b35" }}>
+            Manquants ➜ prices: [{missingInPrices.join(", ")}] | deltas: [{missingInDeltas.join(", ")}]
+          </div>
+        ) : null}
+        <div style={{ marginTop: 8 }}>
+          <button onClick={load}>↻ Refresh</button>
+        </div>
+        {/* Échantillons tronqués pour inspection rapide */}
+        <details style={{ marginTop: 8 }}>
+          <summary>Voir échantillons JSON</summary>
+          <pre style={pre}>{diag.lastPricesSample}</pre>
+          <pre style={pre}>{diag.lastDeltasSample}</pre>
+        </details>
+        {err ? <div style={{ marginTop: 8, color: "red" }}>{err}</div> : null}
       </div>
 
-      {err ? (
-        <div style={{ color: "red", whiteSpace: "pre-wrap" }}>
-          {err}
-        </div>
-      ) : null}
-
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto", marginTop: 12 }}>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead>
             <tr>
@@ -122,12 +171,28 @@ export default function Trading() {
       </div>
 
       <p style={{ marginTop: 8, color: "#666" }}>
-        Source: <code>{/* eslint-disable-next-line no-undef */ (window.__API_BASE__ || import.meta.env.VITE_API_BASE || "/api")}</code>
+        Si rien ne s’affiche, regarde les “Clés reçues”. Si elles sont vides, c’est le backend.
+        Si elles existent mais ne correspondent pas aux paires, ajuste <code>DEFAULT_PAIRS</code> (ex: BTC/ETH/SOL).
       </p>
     </div>
   );
 }
 
+const box = {
+  border: "1px solid #ddd",
+  borderRadius: 8,
+  padding: 12,
+  background: "#fafafa",
+};
+const pre = {
+  margin: 0,
+  padding: 8,
+  background: "#111",
+  color: "#ddd",
+  borderRadius: 6,
+  overflowX: "auto",
+  maxHeight: 280,
+};
 const th = {
   textAlign: "left",
   borderBottom: "1px solid #ddd",
