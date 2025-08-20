@@ -1,199 +1,134 @@
-import { API_BASE_URL } from "../lib/config.js";
-import React, { useEffect, useState, useContext } from "react";
-import { fetchLatestSignals } from "../utils/firestoreSignals"; // 🔁 Firestore
-const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
+// FICHIER: src/pages/Signals.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { apiLatestSignals, apiTickSignals } from "../utils/api";
 
-// ████████ 🧠 COMPOSANT PRINCIPAL ████████
-const Signals = () => {
-  const [signals, setSignals] = useState([]);
-  const [logs, setLogs] = useState([]);
+const REFRESH_MS = 10_000; // refresh doux
 
-  // 🎯 Formateur de nombre
-  const fmt = (v) => Number(v || 0).toFixed(2);
-
-  // 🎨 Couleur par type de signal
-  const getColor = (type) => {
-    if (type === "BUY") return "#0f0";
-    if (type === "SELL") return "#f00";
-    if (type === "CONTEXT") return "#4ea8de";
-    return "#aaa";
-  };
-
-  // 🎨 Couleur par niveau de risque
-  const getRiskColor = (risk = "") => {
-    if (risk.includes("Faible")) return "lightgreen";
-    if (risk.includes("Moyen")) return "orange";
-    if (risk.includes("Élevé")) return "salmon";
-    return "#ccc";
-  };
-
-  // 🔁 Lecture logs serveur API (version JSON)
-const fetchLogLines = async () => {
+function fmtTs(ts) {
   try {
-    const res = await fetch(((import.meta.env.VITE_API_BASE||"${API_BASE_URL}").replace(/\/+$/,""))+"/get-latest-signals");
-    const json = await res.json();
-    if (Array.isArray(json.log)) {
-      setLogs(json.log.slice(-25).reverse());
-    } else {
-      setLogs(["❌ Format de logs inattendu."]);
-    }
-  } catch (err) {
-    console.error("❌ Erreur chargement logs:", err);
-    setLogs(prev => [...prev, "❌ Erreur lecture logs serveur."]);
+    if (!ts) return "—";
+    const d = new Date(ts);
+    if (!isFinite(d)) return String(ts);
+    return d.toLocaleString();
+  } catch {
+    return String(ts);
   }
-};
+}
 
-  // 🔁 Lecture signaux Firestore
-  const loadSignals = async () => {
+export default function Signals() {
+  const [items, setItems] = useState([]);
+  const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setErr(null);
     try {
-      const data = await fetchLatestSignals(); // 🔥 Firebase Firestore
-      if (!Array.isArray(data)) throw new Error("Données invalides");
-      const sorted = [...data].sort((a, b) => {
-        const ta = new Date(a.timestamp || 0);
-        const tb = new Date(b.timestamp || 0);
-        return tb - ta;
-      });
-      setSignals(sorted);
-    } catch (err) {
-      console.error("❌ Erreur chargement Firestore :", err);
-      setSignals([]); // Fallback vide
+      // tick léger (lit /trader-log) pour “réveiller” la pipeline si tu l’utilises
+      apiTickSignals().catch(() => {});
+      const arr = await apiLatestSignals(200);
+      if (Array.isArray(arr)) setItems(arr);
+      else setItems([]);
+    } catch (e) {
+      console.error("[Signals] load err", e);
+      setErr(String(e?.message || e));
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  // 🚀 Initialisation
   useEffect(() => {
-    loadSignals();
-    fetchLogLines();
-    const timer = setInterval(() => {
-      loadSignals();
-      fetchLogLines();
-    }, 30000);
-    return () => clearInterval(timer);
+    load();
+    const id = setInterval(load, REFRESH_MS);
+    return () => clearInterval(id);
   }, []);
 
-  // ████████ RENDU VISUEL ████████
-  return (
-    <div style={{
-      backgroundImage: 'url("/backgrounds/homebackground.png")',
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundAttachment: isDesktop ? "fixed" : "scroll",
-      padding: "6rem 2rem 2rem",
-      minHeight: "100vh",
-      color: "#fff",
-      fontFamily: "sans-serif"
-    }}>
-
-      {/* 🧱 BARRE TITRE */}
-      <div style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-        backgroundColor: "rgba(0,0,0,0.6)",
-        backdropFilter: "blur(8px)",
-        padding: "1rem",
-        borderRadius: "6px",
-        marginBottom: "1.5rem"
-      }}>
-        <h1>🚨 Signaux IA</h1>
-      </div>
-
-      {/* 🧾 LOGS CONSOLE */}
-      <div style={{
-        backgroundColor: "rgba(0,0,0,0.5)",
-        borderRadius: "6px",
-        padding: "1rem",
-        marginBottom: "2rem",
-        fontFamily: "monospace",
-        fontSize: "0.9rem",
-        maxHeight: "180px",
-        overflowY: "auto",
-        boxShadow: "inset 0 0 4px #000"
-      }}>
-        {logs.length === 0 ? (
-          <div style={{ color: "#888" }}>Aucun log pour le moment…</div>
-        ) : (
-          logs.map((log, i) => (
-            <div key={i} style={{ color: "#4ea8de" }}>{log}</div>
-          ))
-        )}
-      </div>
-
-      {/* 📊 BLOC SIGNAUX */}
-      <div style={{
-        backgroundColor: "rgba(0,0,0,0.5)",
-        padding: "1rem",
-        borderRadius: "8px",
-        maxHeight: "65vh",
-        overflowY: "auto"
-      }}>
-        {signals.length === 0 ? (
-          <p style={{ color: "#888" }}>Aucun signal pour l’instant.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {signals.map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  borderLeft: `6px solid ${getColor(s.type)}`,
-                  backgroundColor: "rgba(30, 30, 30, 0.6)",
-                  backdropFilter: "blur(8px)",
-                  borderRadius: "8px",
-                  padding: "1rem",
-                  width: "100%",
-                  boxSizing: "border-box",
-                }}
-              >
-                {/* 🧠 HEADER */}
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
-                  <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>{s.crypto || "—"}</div>
-                  <div style={{ color: "#ccc", fontSize: "1rem" }}>🧠 {s.type_ia || s.type || "inconnu"}</div>
-                  <div style={{ color: getRiskColor(s.risk), fontSize: "1rem" }}>
-                    Risque : {s.risk || "—"}
-                  </div>
-                </div>
-
-                {/* 📊 SCORE */}
-                <div style={{ fontSize: "0.9rem", color: "#aaa", marginTop: "0.3rem" }}>
-                  📊 Score IA : {fmt(s.score)} / 5
-                  {s.score20 !== undefined && ` | Score global : ${fmt(s.score20)} / 20`}
-                  <br />
-                  🕒 {new Date(s.timestamp).toLocaleString()}
-                </div>
-
-                {/* 📋 EXPLICATIONS */}
-                {Array.isArray(s.explanation) && (
-                  <ul style={{
-                    marginTop: "0.5rem",
-                    color: "#ddd",
-                    fontSize: "0.95rem",
-                    lineHeight: "1.4",
-                    paddingLeft: "1.2rem"
-                  }}>
-                    {s.explanation.map((line, j) => (
-                      <li key={j}>{line}</li>
-                    ))}
-                  </ul>
-                )}
-
-                {/* 🔗 TRADINGVIEW */}
-                <div style={{ marginTop: "0.5rem" }}>
-                  <a
-                    href={`https://www.tradingview.com/symbols/${s.crypto?.replace("/", "")}USD`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "#4ea8de", fontWeight: "bold", textDecoration: "none" }}
-                  >
-                    → Voir sur TradingView
-                  </a>
-                </div>
-              </div>
-            ))}
+  const content = useMemo(() => {
+    if (loading) return <div style={{ padding: 12 }}>Chargement…</div>;
+    if (err) return <div style={{ padding: 12, color: "crimson" }}>Erreur: {err}</div>;
+    if (!items.length) {
+      return (
+        <div style={{ padding: 12 }}>
+          <h2>Signals</h2>
+          <div style={{ marginTop: 8, opacity: 0.8 }}>
+            Aucun signal pour le moment. Si tu t’attends à en voir, vérifie la
+            production du fichier <code>data/signals.json</code> côté API (voir § 2).
           </div>
-        )}
-      </div>
-    </div>
-  );
-};
+        </div>
+      );
+    }
 
-export default Signals;
+    return (
+      <div style={{ padding: 12 }}>
+        <h2>Signals ({items.length})</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={th}>Date</th>
+              <th style={th}>Symbol</th>
+              <th style={th}>Side</th>
+              <th style={th}>Price</th>
+              <th style={th}>Confidence</th>
+              <th style={th}>Meta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((s, i) => (
+              <tr key={i}>
+                <td style={td}>{fmtTs(s.ts || s.time || s.timestamp)}</td>
+                <td style={td}>{String(s.symbol || s.pair || "—")}</td>
+                <td style={td}>{String(s.side || s.action || "—")}</td>
+                <td style={td}>
+                  {typeof s.price === "number" ? s.price : s.price ?? "—"}
+                </td>
+                <td style={td}>
+                  {typeof s.confidence === "number" ? `${(s.confidence*100).toFixed(0)}%` : (s.confidence ?? "—")}
+                </td>
+                <td style={td}>
+                  <pre style={pre}>
+                    {JSON.stringify(
+                      {
+                        ...s,
+                        ts: undefined,
+                        time: undefined,
+                        timestamp: undefined,
+                        symbol: undefined,
+                        pair: undefined,
+                        side: undefined,
+                        action: undefined,
+                        price: undefined,
+                        confidence: undefined,
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }, [items, err, loading]);
+
+  return content;
+}
+
+const th = {
+  textAlign: "left",
+  borderBottom: "1px solid #ddd",
+  padding: "8px 6px",
+  fontWeight: 600,
+};
+const td = {
+  borderBottom: "1px solid #eee",
+  padding: "8px 6px",
+  verticalAlign: "top",
+};
+const pre = {
+  margin: 0,
+  whiteSpace: "pre-wrap",
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontSize: 12,
+  opacity: 0.9,
+};
