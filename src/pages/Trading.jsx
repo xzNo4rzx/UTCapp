@@ -1,204 +1,125 @@
-// FICHIER: src/pages/Trading.jsx (version diagnostic)
+// FICHIER: src/pages/Trading.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { apiGetPrices, apiDeltas, API_BASE } from "../utils/api";
+import { apiGetPrices, apiDeltas } from "../utils/api";
 
-// Ajuste si ton backend renvoie BTC/ETH/SOL sans USDT
-const DEFAULT_PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT"];
-const WINDOWS = ["1m", "5m", "1h"];
+// Liste des paires qu'on affiche (modifiable)
+const DEFAULT_SYMBOLS = [
+  "BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","ADAUSDT",
+  "DOGEUSDT","AVAXUSDT","MATICUSDT"
+];
 
-function pctFmt(v) {
-  if (v === null || v === undefined) return "—";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  const s = n.toFixed(2) + "%";
-  return n > 0 ? `+${s}` : s;
+// colonnes de variations à afficher
+const WINDOWS = ["1m","5m","10m","1h","6h","1d","7d"];
+
+function formatPrice(v) {
+  if (v == null) return "—";
+  if (v > 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return v.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
-function priceFmt(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  if (n >= 1000) return n.toFixed(2);
-  if (n >= 1) return n.toFixed(3);
-  return n.toFixed(6);
-}
-function normCandidates(sym) {
-  // On tente plusieurs normalisations : exact, sans "/", sans "USDT", avec "USDT"
-  const s = String(sym || "").toUpperCase();
-  const out = [s];
-  if (s.includes("/")) out.push(s.replace("/", ""));
-  if (s.endsWith("USDT")) out.push(s.slice(0, -4)); // BTCUSDT -> BTC
-  else out.push(s + "USDT");                         // BTC -> BTCUSDT
-  return Array.from(new Set(out));
+function formatPct(v) {
+  if (v == null) return "—";
+  const s = (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+  return s;
 }
 
 export default function Trading() {
-  const [pairs, setPairs] = useState(DEFAULT_PAIRS);
+  const [symbols] = useState(DEFAULT_SYMBOLS);
   const [prices, setPrices] = useState({});
   const [deltas, setDeltas] = useState({});
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-  const [diag, setDiag] = useState({
-    fetchedAt: "",
-    pricesKeys: [],
-    deltasKeys: [],
-    lastPricesSample: "",
-    lastDeltasSample: "",
-  });
+  const [err, setErr] = useState(null);
 
-  const load = async () => {
+  async function loadAll() {
     try {
-      setErr("");
+      setErr(null);
       setLoading(true);
-      const [pr, dl] = await Promise.all([apiGetPrices(pairs), apiDeltas(pairs, WINDOWS)]);
-      // Logs console pour voir brut
-      console.log("[Trading] apiGetPrices ->", pr);
-      console.log("[Trading] apiDeltas ->", dl);
+      const list = symbols.join(",");
+      const [pr, dl] = await Promise.all([
+        apiGetPrices(list),                    // { prices: {...} } ou {...}
+        apiDeltas(list, WINDOWS.join(",")),    // { deltas: {...} } ou {...}
+      ]);
 
-      const deltasMap = (dl && dl.deltas) || {};
-      setPrices(pr || {});
-      setDeltas(deltasMap);
+      // tolère les deux formats côté API (payload “à plat” vs objet wrap)
+      const p = pr?.prices ?? pr ?? {};
+      const d = dl?.deltas ?? dl ?? {};
 
-      const pk = Object.keys(pr || {});
-      const dk = Object.keys(deltasMap || {});
-      setDiag({
-        fetchedAt: new Date().toISOString(),
-        pricesKeys: pk,
-        deltasKeys: dk,
-        lastPricesSample: JSON.stringify(pr || {}, null, 2).slice(0, 600),
-        lastDeltasSample: JSON.stringify(deltasMap || {}, null, 2).slice(0, 600),
-      });
+      setPrices(p);
+      setDeltas(d);
     } catch (e) {
-      console.error(e);
-      setErr(String(e?.message || e));
+      console.error("[Trading] loadAll error", e);
+      setErr(e?.message || "Erreur réseau");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    load();
-    const iv = setInterval(load, 60_000);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pairs.join("|")]);
+    loadAll();
+    const id = setInterval(loadAll, 30_000); // refresh 30s
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbols.join(",")]);
 
   const rows = useMemo(() => {
-    return pairs.map((sym) => {
-      const candidates = normCandidates(sym);
-      let p = null;
-      for (const c of candidates) if (prices[c] !== undefined) { p = prices[c]; break; }
-
-      let d = null;
-      for (const c of candidates) if (deltas[c] !== undefined) { d = deltas[c]; break; }
-
-      return { sym, price: p, d: d || {} };
+    return symbols.map(sym => {
+      const price = prices?.[sym] ?? null;
+      const d = deltas?.[sym] ?? {};
+      return { sym, price, deltas: d };
     });
-  }, [pairs, prices, deltas]);
-
-  // Qui manque ?
-  const missingInPrices = pairs.filter(
-    (sym) => !normCandidates(sym).some((c) => prices[c] !== undefined)
-  );
-  const missingInDeltas = pairs.filter(
-    (sym) => !normCandidates(sym).some((c) => deltas[c] !== undefined)
-  );
+  }, [symbols, prices, deltas]);
 
   return (
     <div style={{ padding: 16 }}>
-      <h2>Trading (diagnostic)</h2>
+      <h2>Trading — Prix &amp; Variations</h2>
 
-      {/* Panneau debug clair */}
-      <div style={box}>
-        <div><b>API_BASE</b>: <code>{API_BASE}</code></div>
-        <div><b>Fetched at</b>: {diag.fetchedAt || "—"}</div>
-        <div style={{ marginTop: 8 }}>
-          <b>Clés reçues</b> — prices: [{diag.pricesKeys.join(", ")}] | deltas: [{diag.deltasKeys.join(", ")}]
-        </div>
-        {(missingInPrices.length || missingInDeltas.length) ? (
-          <div style={{ marginTop: 8, color: "#b35" }}>
-            Manquants ➜ prices: [{missingInPrices.join(", ")}] | deltas: [{missingInDeltas.join(", ")}]
-          </div>
-        ) : null}
-        <div style={{ marginTop: 8 }}>
-          <button onClick={load}>↻ Refresh</button>
-        </div>
-        {/* Échantillons tronqués pour inspection rapide */}
-        <details style={{ marginTop: 8 }}>
-          <summary>Voir échantillons JSON</summary>
-          <pre style={pre}>{diag.lastPricesSample}</pre>
-          <pre style={pre}>{diag.lastDeltasSample}</pre>
-        </details>
-        {err ? <div style={{ marginTop: 8, color: "red" }}>{err}</div> : null}
+      <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:12 }}>
+        <button onClick={loadAll} disabled={loading}>
+          {loading ? "Chargement..." : "Rafraîchir"}
+        </button>
+        {err && <span style={{ color:"tomato" }}>⚠ {err}</span>}
       </div>
 
-      <div style={{ overflowX: "auto", marginTop: 12 }}>
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr>
               <th style={th}>Pair</th>
-              <th style={th}>Price</th>
-              {WINDOWS.map((w) => (
+              <th style={th}>Prix</th>
+              {WINDOWS.map(w => (
                 <th key={w} style={th}>{w}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ sym, price, d }) => (
-              <tr key={sym}>
-                <td style={td}>{sym}</td>
-                <td style={td}>{priceFmt(price)}</td>
-                {WINDOWS.map((w) => {
-                  const val = d?.[w] ?? null;
-                  const n = Number(val);
-                  const color =
-                    !Number.isFinite(n) ? "#999" : n > 0 ? "#0a0" : n < 0 ? "#c00" : "#999";
+            {rows.length === 0 && (
+              <tr><td colSpan={2 + WINDOWS.length} style={tdCenter}>Aucune donnée</td></tr>
+            )}
+            {rows.map(r => (
+              <tr key={r.sym}>
+                <td style={td}>{r.sym}</td>
+                <td style={td}>{formatPrice(r.price)}</td>
+                {WINDOWS.map(w => {
+                  const v = r.deltas?.[w] ?? null;
+                  const color = v == null ? "#bbb" : v >= 0 ? "#22c55e" : "#ef4444";
                   return (
-                    <td key={w} style={{ ...td, color, fontWeight: 600 }}>
-                      {pctFmt(val)}
+                    <td key={w} style={{...td, color, fontWeight:600}}>
+                      {formatPct(v)}
                     </td>
                   );
                 })}
               </tr>
             ))}
-            {!rows.length && !loading && (
-              <tr>
-                <td colSpan={2 + WINDOWS.length} style={{ ...td, color: "#999" }}>
-                  Aucune paire.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
 
-      <p style={{ marginTop: 8, color: "#666" }}>
-        Si rien ne s’affiche, regarde les “Clés reçues”. Si elles sont vides, c’est le backend.
-        Si elles existent mais ne correspondent pas aux paires, ajuste <code>DEFAULT_PAIRS</code> (ex: BTC/ETH/SOL).
+      <p style={{ marginTop:12, opacity:0.7 }}>
+        Source: <code>/prices</code> &amp; <code>/deltas</code> (agrégées côté API).
       </p>
     </div>
   );
 }
 
-const box = {
-  border: "1px solid #ddd",
-  borderRadius: 8,
-  padding: 12,
-  background: "#fafafa",
-};
-const pre = {
-  margin: 0,
-  padding: 8,
-  background: "#111",
-  color: "#ddd",
-  borderRadius: 6,
-  overflowX: "auto",
-  maxHeight: 280,
-};
-const th = {
-  textAlign: "left",
-  borderBottom: "1px solid #ddd",
-  padding: "8px 10px",
-};
-const td = {
-  borderBottom: "1px solid #eee",
-  padding: "8px 10px",
-};
+const th = { textAlign:"left", borderBottom:"1px solid #333", padding:"8px 10px" };
+const td = { borderBottom:"1px solid #222", padding:"8px 10px", whiteSpace:"nowrap" };
+const tdCenter = { ...td, textAlign:"center" };
