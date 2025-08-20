@@ -12,6 +12,7 @@ import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import PrivateRoute from "./components/PrivateRoute.jsx";
 import Admin from "./pages/Admin.jsx";
+import PricesProbe from "../components/PricesProbe"; // ajuste le chemin si besoin
 
 const App = () => {
   useEffect(() => {
@@ -35,6 +36,7 @@ const App = () => {
         <Route path="/admin" element={<Admin />} />
         
       </Routes>
+      <PricesProbe />
     </>
   );
 };
