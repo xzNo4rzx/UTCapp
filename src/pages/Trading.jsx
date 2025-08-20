@@ -2,52 +2,72 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGetPrices, apiDeltas } from "../utils/api";
 
-// Liste des paires qu'on affiche (modifiable)
-const DEFAULT_SYMBOLS = [
-  "BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","ADAUSDT",
-  "DOGEUSDT","AVAXUSDT","MATICUSDT"
-];
+// Symboles à afficher (mets ceux que tu veux)
+const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT"];
 
-// colonnes de variations à afficher
-const WINDOWS = ["1m","5m","10m","1h","6h","1d","7d"];
+const WINDOWS = "1m,5m,10m,1h,6h,1d,7d";
 
-function formatPrice(v) {
-  if (v == null) return "—";
-  if (v > 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  return v.toLocaleString(undefined, { maximumFractionDigits: 6 });
+function normalizePrices(resp) {
+  // /prices -> { prices: {SYM: number} } ou parfois resp direct (fallback)
+  if (resp && typeof resp === "object") {
+    if (resp.prices && typeof resp.prices === "object") return resp.prices;
+    // fallback: si jamais l’API renvoyait déjà un objet clé->prix
+    return resp;
+  }
+  return {};
 }
-function formatPct(v) {
-  if (v == null) return "—";
-  const s = (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
-  return s;
+
+function normalizeDeltas(resp) {
+  // /deltas -> { deltas: {SYM: {1m:..}} }
+  if (resp && typeof resp === "object") {
+    if (resp.deltas && typeof resp.deltas === "object") return resp.deltas;
+    return resp;
+  }
+  return {};
 }
 
 export default function Trading() {
   const [symbols] = useState(DEFAULT_SYMBOLS);
-  const [prices, setPrices] = useState({});
-  const [deltas, setDeltas] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState(null);
+  const [rows, setRows] = useState([]);           // toujours un ARRAY
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
   async function loadAll() {
+    setLoading(true);
+    setErr("");
     try {
-      setErr(null);
-      setLoading(true);
-      const list = symbols.join(",");
-      const [pr, dl] = await Promise.all([
-        apiGetPrices(list),                    // { prices: {...} } ou {...}
-        apiDeltas(list, WINDOWS.join(",")),    // { deltas: {...} } ou {...}
+      // 1) Appels API
+      const [prResp, dlResp] = await Promise.all([
+        apiGetPrices(symbols),
+        apiDeltas(symbols, WINDOWS),
       ]);
 
-      // tolère les deux formats côté API (payload “à plat” vs objet wrap)
-      const p = pr?.prices ?? pr ?? {};
-      const d = dl?.deltas ?? dl ?? {};
+      // 2) Normalisation
+      const prices = normalizePrices(prResp);
+      const deltas = normalizeDeltas(dlResp);
 
-      setPrices(p);
-      setDeltas(d);
+      // 3) Construction de la liste (toujours un tableau)
+      const newRows = symbols.map((s) => {
+        const p = prices?.[s] ?? null;
+        const d = deltas?.[s] ?? {};
+        return {
+          symbol: s,
+          price: typeof p === "number" ? p : null,
+          d1m: d?.["1m"] ?? null,
+          d5m: d?.["5m"] ?? null,
+          d10m: d?.["10m"] ?? null,
+          d1h: d?.["1h"] ?? null,
+          d6h: d?.["6h"] ?? null,
+          d1d: d?.["1d"] ?? null,
+          d7d: d?.["7d"] ?? null,
+        };
+      });
+
+      setRows(newRows);
     } catch (e) {
       console.error("[Trading] loadAll error", e);
-      setErr(e?.message || "Erreur réseau");
+      setErr(e?.message || String(e));
+      setRows([]); // garantie: array
     } finally {
       setLoading(false);
     }
@@ -55,71 +75,63 @@ export default function Trading() {
 
   useEffect(() => {
     loadAll();
-    const id = setInterval(loadAll, 30_000); // refresh 30s
+    const id = setInterval(loadAll, 30_000);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbols.join(",")]);
-
-  const rows = useMemo(() => {
-    return symbols.map(sym => {
-      const price = prices?.[sym] ?? null;
-      const d = deltas?.[sym] ?? {};
-      return { sym, price, deltas: d };
-    });
-  }, [symbols, prices, deltas]);
+  }, []); // eslint-disable-line
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>Trading — Prix &amp; Variations</h2>
-
-      <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:12 }}>
-        <button onClick={loadAll} disabled={loading}>
-          {loading ? "Chargement..." : "Rafraîchir"}
+    <div className="container mx-auto p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <h1 className="text-xl font-bold">Trading</h1>
+        <button
+          onClick={loadAll}
+          className="px-3 py-1 rounded bg-blue-600 text-white"
+          disabled={loading}
+        >
+          {loading ? "Loading..." : "Refresh"}
         </button>
-        {err && <span style={{ color:"tomato" }}>⚠ {err}</span>}
+        {err && <span className="text-amber-400">⚠ {err}</span>}
       </div>
 
-      <div style={{ overflowX:"auto" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
           <thead>
-            <tr>
-              <th style={th}>Pair</th>
-              <th style={th}>Prix</th>
-              {WINDOWS.map(w => (
-                <th key={w} style={th}>{w}</th>
-              ))}
+            <tr className="text-left border-b border-zinc-700">
+              <th className="py-2 pr-4">Symbol</th>
+              <th className="py-2 pr-4">Price</th>
+              <th className="py-2 pr-4">1m</th>
+              <th className="py-2 pr-4">5m</th>
+              <th className="py-2 pr-4">10m</th>
+              <th className="py-2 pr-4">1h</th>
+              <th className="py-2 pr-4">6h</th>
+              <th className="py-2 pr-4">1d</th>
+              <th className="py-2 pr-4">7d</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={2 + WINDOWS.length} style={tdCenter}>Aucune donnée</td></tr>
-            )}
-            {rows.map(r => (
-              <tr key={r.sym}>
-                <td style={td}>{r.sym}</td>
-                <td style={td}>{formatPrice(r.price)}</td>
-                {WINDOWS.map(w => {
-                  const v = r.deltas?.[w] ?? null;
-                  const color = v == null ? "#bbb" : v >= 0 ? "#22c55e" : "#ef4444";
-                  return (
-                    <td key={w} style={{...td, color, fontWeight:600}}>
-                      {formatPct(v)}
-                    </td>
-                  );
-                })}
+            {(rows || []).map((r) => (
+              <tr key={r.symbol} className="border-b border-zinc-800">
+                <td className="py-2 pr-4 font-medium">{r.symbol}</td>
+                <td className="py-2 pr-4">{r.price ?? "—"}</td>
+                <td className="py-2 pr-4">{r.d1m ?? "—"}%</td>
+                <td className="py-2 pr-4">{r.d5m ?? "—"}%</td>
+                <td className="py-2 pr-4">{r.d10m ?? "—"}%</td>
+                <td className="py-2 pr-4">{r.d1h ?? "—"}%</td>
+                <td className="py-2 pr-4">{r.d6h ?? "—"}%</td>
+                <td className="py-2 pr-4">{r.d1d ?? "—"}%</td>
+                <td className="py-2 pr-4">{r.d7d ?? "—"}%</td>
               </tr>
             ))}
+            {(!rows || rows.length === 0) && (
+              <tr>
+                <td className="py-3 text-zinc-400" colSpan={9}>
+                  Aucune donnée pour le moment.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
-
-      <p style={{ marginTop:12, opacity:0.7 }}>
-        Source: <code>/prices</code> &amp; <code>/deltas</code> (agrégées côté API).
-      </p>
     </div>
   );
 }
-
-const th = { textAlign:"left", borderBottom:"1px solid #333", padding:"8px 10px" };
-const td = { borderBottom:"1px solid #222", padding:"8px 10px", whiteSpace:"nowrap" };
-const tdCenter = { ...td, textAlign:"center" };
