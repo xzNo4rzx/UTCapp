@@ -13,12 +13,15 @@ import Register from "./pages/Register.jsx";
 import PrivateRoute from "./components/PrivateRoute.jsx";
 import Admin from "./pages/Admin.jsx";
 import PricesProbe from "./components/PricesProbe"; // ajuste le chemin si besoin
+import DebugBar from "./components/DebugBar";
 
 const App = () => {
   useEffect(() => {
     console.log("✅ UTC App initialisée avec routes.");
   }, []);
   console.log("✅ App.jsx chargé");
+
+<DebugBar />
 
   return (
     <>
