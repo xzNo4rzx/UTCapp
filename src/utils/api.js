@@ -1,56 +1,79 @@
-// utils/api.js — robuste & aligné PricesProbe
+// FICHIER: src/utils/api.js
 
+// Base API résolue (ordre de priorité : fenêtre -> .env -> proxy /api du front)
 export const API_BASE =
-  (typeof window !== "undefined" && (window.__API_BASE__ || window.__API_ORIGIN__)) ||
+  (typeof window !== "undefined" && window.__API_BASE__) ||
   import.meta.env.VITE_API_BASE ||
-  "/api";
+  (typeof window !== "undefined" ? `${window.location.origin}/api` : "/api");
 
-async function httpGet(path, params = {}) {
-  const url = new URL(path, API_BASE.endsWith("/") ? API_BASE : API_BASE + "/");
-  Object.entries(params).forEach(([k, v]) => {
-    if (v == null) return;
-    url.searchParams.set(k, Array.isArray(v) ? v.join(",") : String(v));
-  });
-  const res = await fetch(url.toString(), { credentials: "omit" });
+// --- Utils -------------------------------------------------------------------
+const toQuery = (params = {}) =>
+  Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join("&");
+
+async function httpGet(path, params) {
+  const url = `${API_BASE}/${path}${params ? `?${toQuery(params)}` : ""}`;
+  const res = await fetch(url, { credentials: "include" });
+
+  // Protection contre les réponses HTML (ex: 404/500 proxy) -> évite "Unexpected token '<'"
   const ct = res.headers.get("content-type") || "";
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${url}: ${text || res.statusText}`);
-  }
   if (!ct.includes("application/json")) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API content-type not JSON for ${url}: ${text.slice(0, 120)}`);
+    const text = await res.text();
+    throw new Error(`API non‑JSON (${res.status}) ${url}: ${text.slice(0, 200)}`);
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`API ${res.status} ${url}: ${JSON.stringify(err)}`);
   }
   return res.json();
 }
 
-export async function apiPing() {
-  return httpGet("ping");
+// --- PRIX & CANDLES ----------------------------------------------------------
+export async function apiGetPrice(symbol) {
+  const sym = String(symbol || "").toUpperCase().trim();
+  if (!sym) return { symbol: sym, price: null };
+  const data = await httpGet(`price/${sym}`);
+  return { symbol: sym, price: data?.price ?? null };
 }
 
-export async function apiGetPrices(symbolsArr) {
+export async function apiGetPrices(symbolsArr = []) {
   const symbols = (symbolsArr || [])
-    .map(s => String(s || "").toUpperCase().trim())
+    .map((s) => String(s || "").toUpperCase().trim())
     .filter(Boolean)
     .join(",");
   if (!symbols) return { prices: {}, updatedAt: new Date().toISOString() };
-
-  // Backend: GET /prices?symbols=BTC,ETH,SOL -> { prices: {...}, updatedAt: ISO }
   const data = await httpGet("prices", { symbols });
-  const prices = data?.prices && typeof data.prices === "object" ? data.prices : {};
-  return { prices, updatedAt: data?.updatedAt || new Date().toISOString() };
+  return {
+    prices: data?.prices || {},
+    updatedAt: data?.updatedAt || new Date().toISOString(),
+  };
 }
 
 export async function apiGetKlines(symbol, interval = "1m", limit = 120) {
-  const data = await httpGet("klines", { symbol, interval, limit });
-  return Array.isArray(data?.klines) ? data.klines : [];
+  const sym = String(symbol || "").toUpperCase().trim();
+  if (!sym) return { symbol: sym, interval, limit, klines: [] };
+  const data = await httpGet("klines", { symbol: sym, interval, limit });
+  return {
+    symbol: sym,
+    interval: data?.interval || interval,
+    limit: data?.limit || limit,
+    klines: data?.klines || [],
+  };
 }
 
-// Optionnel: deltas/top-movers si tu les utilises plus tard
-export async function apiGetDeltas(symbolsArr, windows = ["1m","5m","10m","1h","6h","1d","7d"]) {
-  const symbols = (symbolsArr || []).map(s => String(s || "").toUpperCase().trim()).filter(Boolean).join(",");
-  const ws = (windows || []).join(",");
-  if (!symbols) return { deltas: {}, bases: {}, updatedAt: new Date().toISOString() };
+// --- DELTAS & TOP MOVERS -----------------------------------------------------
+export async function apiDeltas(symbolsArr = [], windows = ["1m", "5m", "10m", "1h", "6h", "1d", "7d"]) {
+  const symbols = (symbolsArr || [])
+    .map((s) => String(s || "").toUpperCase().trim())
+    .filter(Boolean)
+    .join(",");
+  const ws = (windows || []).map(String).join(",");
+  if (!symbols) {
+    return { deltas: {}, bases: {}, updatedAt: new Date().toISOString() };
+  }
   const data = await httpGet("deltas", { symbols, windows: ws });
   return {
     deltas: data?.deltas || {},
@@ -68,19 +91,15 @@ export async function apiTopMovers(window = "5m", limit = 5) {
     losers: data?.losers || [],
   };
 }
-// ---- Prix unique ----
-export async function apiGetPrice(symbol) {
-  if (!symbol) return null;
-  const { prices } = await apiGetPrices([symbol]);
-  return prices?.[symbol] ?? null;
+
+// --- SIGNALS (compat IATraderContext) ---------------------------------------
+export async function apiTickSignals(limit = 100) {
+  // côté front : simple fetch périodique (le “tick” est géré par setInterval dans le contexte)
+  const data = await httpGet("get-latest-signals", { limit });
+  return Array.isArray(data) ? data : [];
 }
 
-// ---- Tick des signaux IA ----
-// Permet de "pinger" le backend pour récupérer l'état courant
-export async function apiTickSignals() {
-  const data = await httpGet("tick-signals");
-  return {
-    updatedAt: data?.updatedAt || new Date().toISOString(),
-    signals: data?.signals || [],
-  };
+export async function apiLatestSignals(limit = 100) {
+  const data = await httpGet("get-latest-signals", { limit });
+  return Array.isArray(data) ? data : [];
 }
